@@ -37,5 +37,9 @@
 - [ ] Voting rights: accounts asterisks → per-meeting voting table (2015+)
 - [ ] Accounts-based attendance cross-check (2015+)
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
-- [ ] Simulation engine (out of scope per user decision)
+- [x] Simulation engine (`src/synthetic_council/simulation/`, branch
+  `feat/council-simulation`): memo-driven agents, Jev position+conviction
+  extraction (single parallel request, full probability distribution saved),
+  >=2-round discussion, pre/post deltas + consensus per meeting. Configurable
+  statement backend (gateway or any OpenAI-compatible API).
 - [ ] CI on push (pytest + ruff)

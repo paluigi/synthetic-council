@@ -221,3 +221,6 @@ data/processed/
 *.egg-info/
 .venv/
 __pycache__/
+
+# Local secrets (AI gateway key)
+.env.local
