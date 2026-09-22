@@ -12,9 +12,7 @@ from synthetic_council.simulation.config import SimulationConfig
 if TYPE_CHECKING:
     from synthetic_council.simulation.extraction import PositionExtraction
 
-MEMO_FILENAME_RE = re.compile(
-    r"^(?P<date>\d{4}-\d{2}-\d{2})_(?P<person>.+)\.md$"
-)
+MEMO_FILENAME_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})_(?P<person>.+)\.md$")
 
 INITIAL_STATEMENT_PROMPT = """You are {person}, {role_line} attending today's ECB \
 Governing Council monetary policy meeting on {meeting_date}.

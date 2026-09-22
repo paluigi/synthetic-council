@@ -35,19 +35,38 @@ MAX_EFFECTIVE_LAG_DAYS = 11
 def _slug_date(url: str) -> date | None:
     """True publication date from a press-release URL slug, else None.
 
-    Pre-2015 foedb pub_timestamps are batch times logged the evening BEFORE
-    publication (22:00/23:00 CET), so they are off by one day. The URL slug
-    carries the true date: /press/pr/date/2008/html/pr081008.en.html ->
-    2008-10-08 (the coordinated cut). Modern foedb URLs (ecb.mpYYMMDD~hash)
-    match their timestamps and return None here. Verified: 2008-10-08,
-    2008-11-06, 2011-04-07, 2011-11-03, 2014-06-05, 2015-01-22, 2019-09-12.
+    foedb pub_timestamps logged at 22:00/23:00 CET are batch times from the
+    evening BEFORE publication (documented for pre-2015, but 2016-2018
+    ``ecb.mpYYMMDD`` URLs show the same pattern — ecb.mp170427.en.html carries
+    a 2017-04-26 22:00 timestamp while the true release date is 27 April).
+    The URL slug carries the true date:
+    /press/pr/date/2008/html/pr081008.en.html -> 2008-10-08 (coordinated cut);
+    /press/pr/date/2017/html/ecb.mp170427.en.html -> 2017-04-27.
+    Hashed modern URLs (ecb.mpYYMMDD~hash) match their timestamps anyway.
     """
-    m = re.search(r"/pr(\d{6})(?:_\d+)?\.en\.html", url or "")
+    m = re.search(r"(?:/pr|\.mp)(\d{6})(?:[~_][\w.]+)?\.en\.html", url or "")
     if not m:
         return None
     yy, mm, dd = int(m.group(1)[:2]), int(m.group(1)[2:4]), int(m.group(1)[4:])
     year = 1900 + yy if yy > 90 else 2000 + yy
     return date(year, mm, dd)
+
+
+# The foedb publications database is missing the December 2016 "Monetary policy
+# decisions" press release (GC meeting 7-8 December 2016, all rates unchanged).
+# Patched from the documented record: account mg170112 (meeting of 7-8
+# December 2016) and the ECB key interest rates table (levels since 2016-03-16).
+MISSING_RELEASES = [
+    {
+        "announcement_date": date(2016, 12, 8),
+        "decision": "hold",
+        "rate_effective_date": None,
+        "mro": 0.00,
+        "dfr": -0.40,
+        "mlf": 0.25,
+        "press_release_url": "https://www.ecb.europa.eu/press/pr/date/2016/html/pr161208.en.html",
+    }
+]
 
 
 def true_date(url: str, published_at) -> date:
@@ -127,7 +146,7 @@ def build() -> pl.DataFrame:
     unmatched = sorted({e["effective_date"] for e in eff_list} - used)
     if unmatched:
         print(f"WARNING: {len(unmatched)} rate-change dates matched no announcement: {unmatched}")
-    return df.select(
+    out = df.select(
         "announcement_date",
         "decision",
         "rate_effective_date",
@@ -136,7 +155,17 @@ def build() -> pl.DataFrame:
         "mlf",
         "press_release_url",
         "published_at",
-    ).sort("announcement_date")
+    )
+    patch = (
+        pl.DataFrame(MISSING_RELEASES)
+        .with_columns(
+            pl.col("announcement_date").cast(pl.Date),
+            pl.col("rate_effective_date").cast(pl.Date),
+            pl.lit(None, dtype=pl.Datetime("us", "Europe/Berlin")).alias("published_at"),
+        )
+        .select(out.columns)
+    )
+    return pl.concat([out, patch], how="vertical").sort("announcement_date")
 
 
 def collect() -> pl.DataFrame:

@@ -116,9 +116,7 @@ class OpenAICompatGenerator(BaseGenerator):
         body = json.dumps(payload).encode()
 
         def _post() -> dict[str, Any]:
-            req = urllib.request.Request(
-                self._url, data=body, headers=headers, method="POST"
-            )
+            req = urllib.request.Request(self._url, data=body, headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.loads(resp.read())
 

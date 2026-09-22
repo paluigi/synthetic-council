@@ -60,18 +60,14 @@ class DiscussionResult:
 
     def transcript(self, max_chars: int) -> str:
         """Transcript as seen by agents (tail-truncated to fit context)."""
-        blocks = [
-            f"[Round {t.round_no}] {t.person}: {t.text}" for t in self.turns
-        ]
+        blocks = [f"[Round {t.round_no}] {t.person}: {t.text}" for t in self.turns]
         text = "\n\n".join(blocks)
         if len(text) <= max_chars:
             return text
         return "…[earlier turns truncated]…\n" + text[-max_chars:]
 
 
-def _transcript_for(
-    agent: Agent, result: DiscussionResult, cfg: SimulationConfig
-) -> str:
+def _transcript_for(agent: Agent, result: DiscussionResult, cfg: SimulationConfig) -> str:
     text = result.transcript(cfg.max_transcript_chars)
     if agent.initial_statement and not result.turns:
         text = f"[Opening statement] {agent.person}: {agent.initial_statement}\n\n" + text
@@ -122,6 +118,4 @@ async def run_final_statements(
             transcript=discussion.transcript(cfg.max_transcript_chars),
             max_chars=cfg.max_statements_chars,
         )
-        agent.final_statement = await generator.generate(
-            system, "Give your final statement now."
-        )
+        agent.final_statement = await generator.generate(system, "Give your final statement now.")

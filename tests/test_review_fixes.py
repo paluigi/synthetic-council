@@ -36,8 +36,13 @@ def test_announcement_date_from_url_slug():
     assert str(_slug_date(".../pr150122_1.en.html")) == "2015-01-22"
     # pre-2000 releases: yy > 90 -> 19yy
     assert str(_slug_date(".../pr990408.en.html")) == "1999-04-08"
+    # ecb.mp slugs are authoritative for ALL eras: 2016-2018 unhashed URLs
+    # also carry evening batch timestamps (ecb.mp170427 -> 2017-04-27, not the
+    # 2017-04-26 timestamp); hashed modern URLs simply match their timestamps.
     u2 = "https://www.ecb.europa.eu/press/pr/date/2023/html/ecb.mp231214~9846e62f62.en.html"
-    assert _slug_date(u2) is None
+    assert str(_slug_date(u2)) == "2023-12-14"
+    u3 = "https://www.ecb.europa.eu/press/pr/date/2017/html/ecb.mp170427.en.html"
+    assert str(_slug_date(u3)) == "2017-04-27"
 
 
 def test_vintage_growth_asof_picks_newest_period():

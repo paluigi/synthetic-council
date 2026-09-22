@@ -56,9 +56,7 @@ async def run_meeting(
             agent.initial_statement = turn.text
 
         # 2. pre-discussion extraction (parallel, one Jev call per member)
-        pre = await extract_positions(
-            [(a.initial_statement, a.memo_text) for a in agents], cfg
-        )
+        pre = await extract_positions([(a.initial_statement, a.memo_text) for a in agents], cfg)
         for agent, ext in zip(agents, pre, strict=True):
             agent.initial_extraction = ext
 
@@ -66,9 +64,7 @@ async def run_meeting(
         await run_final_statements(agents, discussion, gen, cfg)
 
         # 4. post-discussion extraction (parallel)
-        post = await extract_positions(
-            [(a.final_statement, a.memo_text) for a in agents], cfg
-        )
+        post = await extract_positions([(a.final_statement, a.memo_text) for a in agents], cfg)
         for agent, ext in zip(agents, post, strict=True):
             agent.final_extraction = ext
 
@@ -125,9 +121,7 @@ def _consensus(agents: list[Agent]) -> dict:
     }
 
 
-def _meeting_payload(
-    date: str, agents: list[Agent], discussion: DiscussionResult
-) -> dict:
+def _meeting_payload(date: str, agents: list[Agent], discussion: DiscussionResult) -> dict:
     return {
         "meeting_date": date,
         "n_agents": len(agents),
@@ -154,9 +148,7 @@ def _meeting_payload(
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-async def run_simulation(
-    dates: list[str], cfg: SimulationConfig, out_dir: Path
-) -> list[Path]:
+async def run_simulation(dates: list[str], cfg: SimulationConfig, out_dir: Path) -> list[Path]:
     """Run several meetings sequentially, writing one JSON payload each."""
     for d in dates:
         if not _DATE_RE.match(d):
@@ -166,15 +158,11 @@ async def run_simulation(
     for d in dates:
         payload = await run_meeting(d, cfg)
         out = out_dir / f"simulation_{d}.json"
-        out.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        out.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         written.append(out)
     return written
 
 
-def run_simulation_sync(
-    dates: list[str], cfg: SimulationConfig, out_dir: Path
-) -> list[Path]:
+def run_simulation_sync(dates: list[str], cfg: SimulationConfig, out_dir: Path) -> list[Path]:
     """Blocking entry point (CLI)."""
     return asyncio.run(run_simulation(dates, cfg, out_dir))
