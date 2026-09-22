@@ -31,11 +31,12 @@ def main() -> None:
         f"span={res.first_decision}..{res.last_decision}"
     )
 
-    step("2/9 speeches: download official ECB all-speeches CSV")
-    from synthetic_council.collectors import speeches
+    step("2/9 speeches: ECB all-speeches CSV + BIS governor speeches")
+    from synthetic_council.collectors import ncb_speeches, speeches
 
     sp = speeches.collect()
     print(sp)
+    print(ncb_speeches.collect())
 
     step("3/9 memberships: Wayback GC-members page snapshots")
     if not skip_members:
@@ -52,7 +53,7 @@ def main() -> None:
     else:
         print("skipped")
 
-    step("4/7 decision calendar + rates")
+    step("4/9 decision calendar + rates")
     from synthetic_council.collectors import decisions
 
     dec = decisions.collect()
@@ -77,25 +78,41 @@ def main() -> None:
     panel = macro_panel.collect(dec)
     print(f"panel rows={panel.height}")
 
+    step("6b/9 accounts extraction: participants + CE proposals (deterministic)")
+    from synthetic_council.mpa_extract import ce_proposal, participants
+
+    print(participants.extract())
+    ce_proposal.extract()  # LLM fallback engages only if a key is configured
+
+    step("6c/9 strict-window latest-speech join (ECB + BIS union)")
+    from synthetic_council import speech_union
+
+    sj = speech_union.build()
+    print(f"latest-speech links={sj.height} over {sj['meeting_date'].n_unique()} meetings")
+
     step("7/9 staff projections (MPD)")
     proj = projections.collect()
     print(proj)
 
-    step("8/9 memos (EA + country situation + full projections + speech)")
+    step("8/9 memos — both experiment arms (EA-only / EA + country annex)")
     from synthetic_council import memo
 
-    last_speech = pl.read_parquet(PROCESSED_DIR / "last_speech_before_meeting.parquet")
     memberships = pl.read_parquet(RAW_DIR / "gc_memberships_wayback.parquet")
-    memo_res = memo.build_memos(
-        dec,
-        memberships,
-        panel,
-        pl.read_parquet(RAW_DIR / "mpd_projections.parquet"),
-        last_speech,
-        Path("data/processed/memos"),
-    )
-    print(memo_res)
-    print("\nAll datasets written under data/. Done.")
+    for annex, name in ((False, "memos_ea"), (True, "memos_ea_country")):
+        res = memo.build_memos(
+            dec,
+            memberships,
+            panel,
+            pl.read_parquet(RAW_DIR / "mpd_projections.parquet"),
+            Path(f"data/processed/{name}"),
+            country_annex=annex,
+        )
+        print(res)
+    print("\nAll keyless datasets written under data/. Done.")
+    print("LLM-dependent steps (run separately; need keys in .env.local):")
+    print("  uv run python -m synthetic_council.mpa_extract.decision_mode")
+    print("  uv run python scripts/build_profiles.py")
+    print("  uv run python -m synthetic_council.member_profiles.speech_sections")
 
 
 if __name__ == "__main__":

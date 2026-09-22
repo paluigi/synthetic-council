@@ -136,16 +136,22 @@ def extract_one(meeting_date: str, markdown: str, use_llm_fallback: bool = True)
         text = "\n\n".join(hits)
         speaker = _speaker_of(hits[-1])
     elif use_llm_fallback:
-        answer = chat(
-            _FALLBACK_SYSTEM.format(ce=ce, ce_short=f"Mr {surname}"),
-            markdown,
-        ).strip()
+        try:
+            answer = chat(
+                _FALLBACK_SYSTEM.format(ce=ce, ce_short=f"Mr {surname}"),
+                markdown,
+            ).strip()
+        except Exception as exc:  # no API key / backend down — degrade, flagged
+            print(f"WARNING ce_proposal LLM fallback unavailable: {exc}")
+            answer = ""
         if answer and answer.upper() != "NOT FOUND":
             text = answer
             speaker = _speaker_of(answer)
             method = "llm"
-        else:
+        elif answer:
             method = "llm_not_found"
+        else:
+            method = "failed"
     else:
         method = "failed"
     direction, bp = _direction(text) if text else (None, None)

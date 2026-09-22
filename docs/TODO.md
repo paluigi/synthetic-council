@@ -34,12 +34,27 @@
 
 ## Next (proposed)
 - [ ] Join PEEI country unemployment/IP vintages into the panel
-- [ ] Voting rights: accounts asterisks → per-meeting voting table (2015+)
-- [ ] Accounts-based attendance cross-check (2015+)
+- [x] Voting rights: accounts asterisks → per-meeting voting table (2015+) —
+  `mpa_extract/participants.py`; asterisk = NO voting right (Art 10.2
+  rotation), verified 2015-01-22 (4 no-vote) and 2024-12-12 (5 no-vote, 21
+  voters)
+- [x] Accounts-based attendance cross-check (2015+) — same module; 59/2,366
+  rows flagged `in_memberships=false` (alternates, Wayback gaps, pre-accession
+  observers)
+- [x] Monetary policy accounts pipeline (2015 →): 96 accounts as markdown,
+  participants, CE proposals (deterministic-first + LLM fallback), decision
+  mode (Jev over LLM-curated verbatim evidence; Bruegel/Trichet categories)
+- [x] Simulation engine, restructured CE-anchored (`feat/mpa-accounts-and-simulation`):
+  verbatim CE proposal → 2 rounds by the others → CE reply → final positions →
+  President's decision + modal-voter cross-check → per-member alignment vs
+  simulated AND real decisions (Jev) → simulated decision mode (Jev +
+  deterministic). Message archive per meeting (messages.jsonl, transcript.md).
+  Two experiment arms (ea_only / country memos) + compare_arms analysis.
+- [x] Member profiles: Tavily per-trait (stable traits only) + Wikipedia +
+  verified facts, one reviewable .md per member (scripts/build_profiles.py)
+- [x] Strict-window speech stance sections (speech after previous GC only;
+  section omitted when none qualifies)
+- [ ] NCB governor speeches: BIS hub coverage is thin post-redesign
+  (47 speeches by our members); harvest NCB websites directly
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
-- [x] Simulation engine (`src/synthetic_council/simulation/`, branch
-  `feat/council-simulation`): memo-driven agents, Jev position+conviction
-  extraction (single parallel request, full probability distribution saved),
-  >=2-round discussion, pre/post deltas + consensus per meeting. Configurable
-  statement backend (gateway or any OpenAI-compatible API).
 - [ ] CI on push (pytest + ruff)

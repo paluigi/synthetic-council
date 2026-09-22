@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 """Live smoke test: 3-agent mini-council on one synthetic memo.
 
-Verifies the full pipeline against the real gateway: opening statements
-(gateway generator) -> Jev extraction -> discussion round 2 -> final
-statements -> Jev extraction -> deltas. Not part of the test suite (needs
-AI_GATEWAY_API_KEY); run manually:
+Verifies the full restructured pipeline against the real gateway: CE proposal
+anchor -> round-1 reactions -> round-2 responses -> CE reply -> final
+statements -> Jev extraction -> President's decision -> alignment (sim+real)
+-> simulated decision mode -> message archive. Not part of the test suite
+(needs AI_GATEWAY_API_KEY); run manually:
 
     uv run python scripts/simulation_smoke_live.py
 """
@@ -15,6 +16,8 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
+import polars as pl
 
 from synthetic_council.simulation.config import SimulationConfig
 from synthetic_council.simulation.runner import run_meeting
@@ -44,28 +47,80 @@ Projection round: **2022-06-01** (ECB/Eurosystem staff).
 | HICP inflation | % | 6.80 | 3.50 | 2.10 |
 | Real GDP growth | % | 2.80 | 2.10 | 2.10 |
 | Unemployment rate | % of labour force | 6.80 | 6.80 | 6.70 |
-
-## Your most recent speech before the meeting
-
-No ECB-website speech on record in the 120 days before the meeting.
 """
 
 AGENTS = [
-    ("Christine Lagarde", "ECB President", ""),
-    ("Klaus Liesman", "Governor, Bundesbank", "**Country:** Germany\n"),
-    ("Pierluigi Testoni", "Governor, Banca d'Italia", "**Country:** Italy\n"),
+    # person, role, country, ce
+    ("Christine Lagarde", "ECB President", None, False),
+    ("Klaus Liesman", "Governor, Deutsche Bundesbank", "DE", False),
+    ("Philip R. Lane", "ECB Executive Board member", None, True),
 ]
 
+PROPOSAL = (
+    "Mr Lane therefore proposed that the three key ECB interest rates be "
+    "raised by 50 basis points, reflecting the continued strength of "
+    "underlying inflation and the tightening labour market."
+)
 
-def make_memos(tmp: Path) -> Path:
-    d = tmp / "memos"
+
+def make_inputs(tmp: Path) -> SimulationConfig:
+    d = tmp / "memos_ea"
     d.mkdir(parents=True, exist_ok=True)
-    for person, role, country_line in AGENTS:
+    for person, role, country, _ in AGENTS:
         (d / f"2022-07-21_{person.replace(' ', '_')}.md").write_text(
-            MEMO.format(person=person, role=role, country_line=country_line),
+            MEMO.format(
+                person=person,
+                role=role,
+                country_line=f"**Country:** {country}\n" if country else "",
+            ),
             encoding="utf-8",
         )
-    return d
+    pl.DataFrame(
+        {
+            "meeting_date": ["2022-07-21"] * len(AGENTS),
+            "person": [a[0] for a in AGENTS],
+            "role": [a[1] for a in AGENTS],
+            "country": [a[2] for a in AGENTS],
+            "replacing": [None] * len(AGENTS),
+            "voting_right": [True] * len(AGENTS),
+            "is_chief_economist": [a[3] for a in AGENTS],
+            "in_memberships": [True] * len(AGENTS),
+        }
+    ).write_parquet(tmp / "participants.parquet")
+    pl.DataFrame(
+        {
+            "meeting_date": ["2022-07-21"],
+            "chief_economist": ["Philip R. Lane"],
+            "proposal_speaker": ["Mr Lane"],
+            "proposal_text": [PROPOSAL],
+            "proposed_direction": ["hike"],
+            "proposed_bp": [50],
+            "ce_mismatch": [False],
+            "extraction_method": ["deterministic"],
+            "source_span": ["..."],
+        }
+    ).write_parquet(tmp / "ce_proposal.parquet")
+    pl.DataFrame(
+        {
+            "announcement_date": ["2022-06-09", "2022-07-21"],
+            "decision": ["hold", "change"],
+            "rate_effective_date": [None, "2022-07-27"],
+            "mro": [-0.50, 0.50],
+            "dfr": [-0.75, 0.00],
+            "mlf": [0.25, 0.75],
+            "press_release_url": ["", ""],
+            "published_at": [None, None],
+        }
+    ).write_parquet(tmp / "gc_decisions.parquet")
+    return SimulationConfig(
+        arm="ea_only",
+        memos_dir=d,
+        out_root=tmp / "simulations",
+        participants_path=tmp / "participants.parquet",
+        ce_proposal_path=tmp / "ce_proposal.parquet",
+        gc_decisions_path=tmp / "gc_decisions.parquet",
+        n_rounds=2,
+    )
 
 
 def load_env_local() -> None:
@@ -83,22 +138,46 @@ async def main() -> int:
         print("AI_GATEWAY_API_KEY not set", file=sys.stderr)
         return 2
 
-    cfg = SimulationConfig(memos_dir=make_memos(Path("/tmp/sim_smoke")), n_rounds=2)
+    tmp = Path("/tmp/sim_smoke")
+    cfg = make_inputs(tmp)
     payload = await run_meeting("2022-07-21", cfg)
 
+    print(f"CE proposal anchor: {payload['ce_proposal']['text'][:120]}...")
     for a in payload["agents"]:
         d = a["deltas"]
+        if not d:
+            print(f"\n== {a['person']} (Chief Economist) ==")
+            print(f"  final: {a['final_statement'][:220]}...")
+            continue
         print(f"\n== {a['person']} ({a['role']}) ==")
-        print(f"  opening  : {a['initial_statement'][:220]}...")
-        print(f"  pre-extr : {d['position_before']} probs={d['probabilities_before']} "
-              f"conviction={d['conviction_before']}")
+        print(f"  reaction : {a['initial_statement'][:220]}...")
+        print(
+            f"  pre-extr : {d['position_before']} probs={d['probabilities_before']} "
+            f"conviction={d['conviction_before']}"
+        )
         print(f"  final    : {a['final_statement'][:220]}...")
-        print(f"  post-extr: {d['position_after']} probs={d['probabilities_after']} "
-              f"conviction={d['conviction_after']}")
+        print(
+            f"  post-extr: {d['position_after']} probs={d['probabilities_after']} "
+            f"conviction={d['conviction_after']}"
+        )
         print(f"  changed={d['position_changed']} dConviction={d['conviction_delta']}")
+        print(f"  alignment sim={a['alignment']['sim']} real={a['alignment']['real']}")
 
-    print("\nConsensus:", payload["consensus"])
+    print(
+        "\nDecision:",
+        payload["decision"]["stance"],
+        "| voters' mode:",
+        payload["decision"]["modal_stance_voters"],
+    )
+    print(
+        "Mode (jev/deterministic):",
+        payload["mode"]["jev_label"],
+        "/",
+        payload["mode"]["deterministic_label"],
+    )
+    print("Consensus:", payload["consensus"])
     print("Turns:", len(payload["turns"]))
+    print("Archive:", cfg.out_root / "ea_only" / "2022-07-21")
     return 0
 
 

@@ -1,12 +1,14 @@
 # synthetic-council
 
 Agent-based simulations of the ECB Governing Council (GC) for interest rate
-decisions. This repository currently contains the **data foundation**: collectors
-and curated datasets that reconstruct, for every GC monetary policy meeting since
-1999, (i) the decision and rate levels, (ii) who sat on the Council and in what
-role, (iii) the macroeconomic information available *at that time* (true vintages
-where they exist), (iv) each member's last public speech before the meeting, and
-(v) per-member briefing memos suitable as LLM-agent inputs.
+decisions. The repository contains (i) the **data foundation**: collectors and
+curated datasets reconstructing, for every GC monetary policy meeting since
+1999, the decision and rate levels, the roster and voting rights (from the
+monetary policy accounts), the macroeconomic information available *at that
+time* (true vintages where they exist), per-member speeches and web-evidence
+member profiles; and (ii) the **simulation engine**: a CE-anchored LLM-agent
+deliberation with Jev position/alignment/mode measurement, run as a two-arm
+experiment (euro-area-only vs +country memos) over the accounts era.
 
 ## Layout
 
@@ -23,17 +25,29 @@ src/synthetic_council/
     macro.py                PEEI vintages, RTD HICP vintages, CISS, sentiment
     macro_panel.py          as-of macro panel per meeting
     projections.py          ECB/Eurosystem staff projections (MPD)
-  memo.py                   per-member markdown briefing builder
+  accounts.py              monetary policy accounts (2015 →, markdown)
+    ncb_speeches.py         BIS speeches hub harvest (governors)
+  mpa_extract/              accounts extraction: participants + voting
+    rights, decision mode (Jev over LLM-curated evidence), CE proposal
+  speech_union.py           strict-window latest-speech join (ECB + BIS)
+  member_profiles/          Tavily per-trait + Wikipedia profiles,
+    speech-stance memo sections, synthesis
+  memo.py                   per-member markdown briefing builder (2 arms)
+  jev.py                    shared Jev choice helper (gateway)
   simulation/               LLM-agent council simulation (see below)
-    config.py               SimulationConfig (generator/extractor/rounds knobs)
-    agent.py                per-member agent built from the briefing memo
+    agent.py                roster from accounts participants + memos
     generator.py            statement backends: Vercel AI Gateway | OpenAI-compatible
     extraction.py           Jev position+conviction extraction (gateway)
-    discussion.py           multi-round discussion + final statements
-    runner.py               meeting orchestration, deltas, consensus
+    discussion.py           CE proposal -> 2 rounds -> CE reply -> finals
+    decision.py             President's decision + modal-voter cross-check
+    alignment.py            per-member {aligned, non_aligned} vs sim+real
+    mode.py                 simulated unanimity/consensus/majority
+    recorder.py             message archive (messages.jsonl, transcript.md)
+    runner.py               meeting orchestration, payloads
+  analysis/compare_arms.py  two-arm experiment comparison
 data/
-  raw/                      source dumps (parquet)
-  processed/                curated datasets + memos/
+  raw/                      source dumps (parquet; accounts/ as markdown)
+  processed/                curated datasets + memos_ea/ + memos_ea_country/
 docs/
   data-sources/             per-source explainer documents (reproducibility)
   literature-review.md      OpenAlex-compiled review
@@ -55,76 +69,89 @@ uv run python -m synthetic_council.memo
 Every dataset documents its endpoints, discovery path and verification in
 `docs/data-sources/`. No API keys required.
 
-## Datasets (verified 2026-09-19)
+## Datasets (verified 2026-09-23)
 
 | dataset | rows | span | source |
 |---|---|---|---|
-| `gc_decisions.parquet` | 318 meetings | 1999-03 → 2026-07 | ECB foedb (URL-slug dates) + SDMX FM |
+| `gc_decisions.parquet` | 319 meetings | 1999-03 → 2026-09 | ECB foedb (URL-slug dates, all eras) + SDMX FM |
 | `gc_memberships_wayback.parquet` | 93 tenures / 87 persons | 2004 → 2026 | Wayback GC pages (3 layouts) |
-| `speeches.parquet` | 3,052 | 1997 → 2026-07 | ECB speeches CSV |
-| `last_speech_before_meeting.parquet` | 1,888 meeting×speaker links | 1999 → 2026 | idem |
+| `accounts/` + `accounts_index.parquet` | 96 accounts (93 rate meetings) | 2015-01 → 2026-07 | ECB foedb enumeration + HTML→markdown |
+| `account_participants.parquet` | 2,366 meeting×member rows | 2015 → 2026 | accounts attendees + voting rights (asterisks) |
+| `account_ce_proposal.parquet` | 96 proposals (69 deterministic) | 2015 → 2026 | accounts §1 (regex; LLM fallback flagged) |
+| `account_decision_mode.parquet` | unanimity/consensus/majority + probs | 2015 → 2026 | Jev over LLM-curated §2 evidence |
+| `speeches.parquet` | 3,052 (ECB) + 47 (BIS) | 1997 → 2026-09 | ECB speeches CSV + BIS hub |
+| `latest_speech_per_meeting.parquet` | 453 links, strict window | 2015 → 2026 | speech_union (ECB + BIS) |
 | `macro_asof_panel.parquet` | ~39.5k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + CISS + DG-ECFIN |
-| `staff_projections.parquet` | 154,686 | 2000 → 2026 | ECB MPD |
-| `memos/` | 5,175 briefings (all meetings 2004→2026) | — | assembled |
+| `staff_projections.parquet` | 161,066 | 2000 → 2026 | ECB MPD |
+| `memos_ea/` + `memos_ea_country/` | 5,200 briefings each | 2004 → 2026 | assembled (experiment arms) |
+| `member_profiles/` | one reviewable .md per member | — | Tavily + Wikipedia + facts |
 
 Rate levels note: the MRO column splices the fixed-rate tender rate (MRR_FR)
 with the minimum bid rate (MRR_MBR) for the variable-rate-tender era
 2000-06-28 → 2008-10-14 — see `src/synthetic_council/collectors/rates.py`.
 
-## Council simulation
+## Council simulation (CE-anchored, two arms)
 
-`synthetic_council.simulation` turns the briefing memos into an LLM-agent
-Governing Council:
+`synthetic_council.simulation` anchors each meeting to the Chief Economist's
+**verbatim proposal** from the real account, then:
 
-1. **Opening statements** — each member reads their own memo (euro area vintage
-   macro + staff projections + country annex and last speech for governors) and
-   states their motivation first, decision last.
-2. **Pre-discussion extraction** — Jev (`typesafe-ai/jev` via the Vercel AI
-   Gateway) classifies each statement in **one parallel request**: position
-   {raise, hold, lower} with the **full probability distribution**, plus a
-   conviction score (0 = tentative … 2 = fully committed). TypeSafe's native
-   confidence statistic is recorded but saturates at 1.0 for choices, so the
-   conviction score is the usable confidence measure.
-3. **Discussion** — at least 2 rounds (`--rounds`); every member speaks in every
-   round seeing the transcript so far, reacting to colleagues without having to
-   conform.
-4. **Final statements + post-discussion extraction** — same Jev extraction on
-   the closing statements; per-member deltas (position flips, conviction and
-   probability shifts) and the council's before/after balance are written to
-   `data/processed/simulations/simulation_<date>.json`.
+1. **Two discussion rounds** — every non-CE member reacts to the proposal
+   (round 1: memo-grounded, persona-aware) and responds to colleagues
+   (round 2, full transcript visible).
+2. **CE reply** — the Chief Economist always replies to the discussion,
+   defending or adjusting the proposal.
+3. **Final summary positions** — every member ends with an explicit
+   "Position: raise/hold/lower" line.
+4. **Jev extraction** — position {raise, hold, lower} with the **full
+   probability distribution** plus a conviction rubric (0 tentative … 2
+   committed), on the round-1 reactions ("before") and the final statements
+   ("after"); per-member deltas and the council balance are recorded.
+5. **Decision** — the President formulates the decision; a modal-voter
+   cross-check (voting rights from the accounts) is recorded alongside.
+6. **Alignment** — per member, Jev {aligned, non_aligned} probabilities
+   against the simulated decision AND the real ECB decision.
+7. **Simulated decision mode** — unanimity/consensus/majority measured twice:
+   Jev with the same criteria as the ground-truth extraction, and a
+   deterministic aggregation of the alignment probabilities.
 
-Statements and extraction are separate backends: statements come from the
-gateway (`--generator gateway`, default `openai/gpt-4o-mini`) **or any
-OpenAI-compatible endpoint** (`--generator openai_compat` with
-`OPENAI_COMPAT_BASE_URL` / `OPENAI_COMPAT_API_KEY` / `OPENAI_COMPAT_MODEL`);
-extraction is always Jev on the gateway.
+Every generator/Jev message is archived per meeting
+(`{out}/{arm}/{date}/messages.jsonl` + `transcript.md` + `payload.json`) for
+inspection and reuse. Statements come from the gateway (`--generator
+gateway`, default `openai/gpt-4o-mini`) **or any OpenAI-compatible
+endpoint** (`--generator openai_compat`); extraction is always Jev on the
+gateway. Full methodology: `docs/methods-simulation.md`.
 
 ```bash
-# build memos first (see Reproducing), then one meeting:
-uv run python scripts/run_simulation.py 2022-07-21 --rounds 2
+# one meeting, one arm:
+uv run python scripts/run_simulation.py 2022-07-21 --arm ea_only
 
-# EVERY meeting that has memos, oldest first, resumable (re-running skips
-# meetings whose simulation_<date>.json already exists):
-uv run python scripts/run_simulation.py --all
+# full two-arm experiment over the anchored meetings (resumable):
+uv run python scripts/run_simulation.py --all --arm ea_only
+uv run python scripts/run_simulation.py --all --arm country
 
-# restrict to the true-vintage era onward:
-uv run python scripts/run_simulation.py --all --from 2015
+# comparison report (alignment delta, mode confusion, direction accuracy):
+uv run python -m synthetic_council.analysis.compare_arms
 
-# validate config + memos without API calls:
-uv run python scripts/run_simulation.py --all --dry-run
+# validate inputs without API calls:
+uv run python scripts/run_simulation.py --all --arm ea_only --dry-run
 
 # live 3-agent pipeline check on synthetic memos (no dataset needed):
 uv run python scripts/simulation_smoke_live.py
 ```
 
-Requires `AI_GATEWAY_API_KEY` in `.env.local` (never committed).
+Requires `AI_GATEWAY_API_KEY` in `.env.local` (never committed);
+`TAVILY_API_KEY` additionally for profile building.
 
 ## Reproducing everything
 
 ```bash
 uv sync
-uv run python scripts/collect_all.py            # full pipeline (~30-40 min, no keys)
-uv run pytest                                   # 35 tests
+uv run python scripts/collect_all.py            # keyless pipeline (~30-40 min)
+# LLM-dependent steps (keys in .env.local, see .env.example):
+uv run python -m synthetic_council.mpa_extract.decision_mode
+uv run python scripts/build_profiles.py
+uv run python -m synthetic_council.member_profiles.speech_sections
+uv run pytest                                   # 56 tests
 uv run ruff check src/ scripts/ tests/
 ```
 
