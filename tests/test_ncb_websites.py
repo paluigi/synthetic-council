@@ -156,8 +156,7 @@ class TestBancaDItalia:
             == "2019-12-10"
         )
         assert (
-            nw._it_pdf_date("https://x/20260921-panetta/en-panetta-21-09-2026.pdf")
-            == "2026-09-21"
+            nw._it_pdf_date("https://x/20260921-panetta/en-panetta-21-09-2026.pdf") == "2026-09-21"
         )
         assert nw._it_pdf_date("https://x/no-date-here.pdf") is None
 
@@ -192,3 +191,108 @@ class TestBancaDItalia:
             p.read_bytes(), "https://x/en-x-01-01-2024.pdf", "t", "2024-01-01"
         )
         assert got is None
+
+    # --- per-year listing -> html (2025->) / pdf (2015-24) entries ----------
+
+    @staticmethod
+    def _year_client(pages: dict[str, str]):
+        class FakeResp:
+            def __init__(self, text):
+                self.text = text
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def get(self, url):
+                for year, html in pages.items():
+                    if f"integov{year}" in url:
+                        return FakeResp(html)
+                return FakeResp("<html><body></body></html>")
+
+        return FakeClient()
+
+    def test_old_years_yield_pdf_entries(self):
+        client = self._year_client(
+            {
+                "2019": (
+                    "<ul><li><div class='bdi-result-date'>Data Pubblicazione: 10 Dec 2019</div>"
+                    "<a href='/pubblicazioni/interventi-governatore/integov2019/"
+                    "en-VISCO_10.12.2019.pdf'>A speech</a></li></ul>"
+                )
+            }
+        )
+        got = nw.it_speech_entries(client, 2019, 2019)
+        (meta,) = got.values()
+        assert meta["kind"] == "pdf"
+        assert meta["date"] == "2019-12-10"
+        assert meta["speaker"] == ""
+
+    def test_recent_years_yield_html_entries_with_slug_date_and_speaker(self):
+        client = self._year_client(
+            {
+                "2026": (
+                    "<ul><li><div class='bdi-result-date'>Data Pubblicazione: 22 Sep 2026</div>"
+                    "<a href='/pubblicazioni/interventi-governatore/integov2026/"
+                    "20260921-panetta/index.html'>The challenge of innovation</a></li></ul>"
+                )
+            }
+        )
+        got = nw.it_speech_entries(client, 2026, 2026)
+        ((url, meta),) = got.items()
+        assert meta["kind"] == "html"
+        # slug (speech) date wins over the later publication date
+        assert meta["date"] == "2026-09-21"
+        assert meta["speaker"] == "panetta"
+        assert url.endswith("20260921-panetta/index.html" + nw.IT_ENTRY_LANG)
+
+    def test_english_pdf_preferred_per_day(self):
+        client = self._year_client(
+            {
+                "2016": (
+                    "<ul><li><div class='bdi-result-date'>Data Pubblicazione: 5 Feb 2016</div>"
+                    "<a href='/x/it_VISCO_05.02.2016.pdf'>It</a></li>"
+                    "<li><div class='bdi-result-date'>Data Pubblicazione: 5 Feb 2016</div>"
+                    "<a href='/x/en_VISCO_05.02.2016.pdf'>En</a></li></ul>"
+                )
+            }
+        )
+        got = nw.it_speech_entries(client, 2016, 2016)
+        assert list(got) == ["https://www.bancaditalia.it/x/en_VISCO_05.02.2016.pdf"]
+
+    def test_compact_slug_date_fallback(self):
+        page = nw.parse_speech_page(
+            "<html><body><main><h1>T</h1><p>" + "a" * 600 + "</p></main></body></html>",
+            "https://www.bancaditalia.it/x/20260921-panetta/index.html" + nw.IT_ENTRY_LANG,
+        )
+        assert page is not None and page["date"] == "2026-09-21"
+
+    def test_speaker_matched_from_slug_surname(self):
+        variants = [
+            ("Fabio Panetta", "fabio panetta", "panetta", "2023-11-01", "2026-10-22"),
+            ("Ignazio Visco", "ignazio visco", "visco", "2011-11-01", "2023-10-31"),
+        ]
+        # entry-page body names the governor only far from the head
+        page = {
+            "date": "2026-09-21",
+            "author": "panetta",
+            "title": "The challenge of innovation",
+            "text": "Many thanks to the organizers. " + "x" * 3000,
+        }
+        assert nw.match_speaker(page, variants) == "Fabio Panetta"
+
+    def test_prefer_it_html_retires_superseded_pdf_rows(self):
+        rows = [
+            {"date": "2026-09-21", "source": "it", "url": "https://x/a.pdf"},
+            {"date": "2026-09-21", "source": "it", "url": "https://x/b" + nw.IT_ENTRY_LANG},
+            {"date": "2019-12-10", "source": "it", "url": "https://x/c.pdf"},
+            {"date": "2026-09-21", "source": "fi", "url": "https://y/d.pdf"},
+        ]
+        fetched: dict[str, str] = {}
+        kept = nw._prefer_it_html(rows, fetched)
+        assert [r["url"] for r in kept] == [
+            "https://x/b" + nw.IT_ENTRY_LANG,
+            "https://x/c.pdf",
+            "https://y/d.pdf",
+        ]
+        assert fetched == {"https://x/a.pdf": "superseded-by-html"}

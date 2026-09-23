@@ -17,10 +17,11 @@ mentioned in passing) rare and disambiguates same-surname successors
 Working sites (2026-09): DE (bundesbank.de/en/press/speeches), FR
 (banque-france.fr/en/governors-interventions), ES (bde.es
 intervenciones-publicas), FI (suomenpankki.fi), SK (nbs.sk/en/news),
-EE (eestipank.ee/en/press). The remaining NCBs are documented gaps —
-JavaScript-rendered listings with no sitemap (BE, IE, SI, LV, BG, LU, HR,
-AT SPA, IT event pages without text), or bot protection (NL, PT, GR, LT),
-or unreachable (CY, MT). See docs/data-sources/ncb-websites.md.
+EE (eestipank.ee/en/press), IT (bancaditalia.it per-year governor listing:
+HTML entry pages 2025→, PDFs 2015–24). The remaining NCBs are documented
+gaps — JavaScript-rendered listings with no sitemap (BE, IE, SI, LV, BG,
+LU, HR, AT SPA), or bot protection (NL, PT, GR, LT), or unreachable
+(CY, MT). See docs/data-sources/ncb-websites.md.
 
 Output:
 - data/raw/speeches/ncb_web_speeches.parquet (matched speeches; schema
@@ -286,8 +287,12 @@ def parse_speech_page(html: str, url: str) -> dict | None:
             elif m_month_first:
                 month, day, year = m_month_first.groups()
                 date_str = f"{year}-{_MONTHS[month.lower()]:02d}-{int(day):02d}"
-    if not date_str:  # slug fallback: /2024/05/12/ or 2024-05-12_
-        m = re.search(r"/(\d{4})/(\d{2})/(\d{2})/", url) or re.search(r"(\d{4}-\d{2}-\d{2})_", url)
+    if not date_str:  # slug fallback: /2024/05/12/, 2024-05-12_ or /20240512-name/
+        m = (
+            re.search(r"/(\d{4})/(\d{2})/(\d{2})/", url)
+            or re.search(r"(\d{4}-\d{2}-\d{2})_", url)
+            or re.search(r"/(\d{4})(\d{2})(\d{2})-[a-z]", url)
+        )
         if m:
             date_str = "-".join(m.groups()) if m.lastindex == 3 else m.group(1)
 
@@ -373,25 +378,48 @@ def match_speaker(
     return None
 
 
-# --- Banca d'Italia: governor speeches per-year listing (PDF corpus) -------
+# --- Banca d'Italia: governor speeches per-year listing ----------------------
 
 IT_YEAR_URL = (
     "https://www.bancaditalia.it/pubblicazioni/interventi-governatore/"
     "integov{year}/index.html?com.dotmarketing.htmlpage.language=1&dotcache=refresh"
 )
+IT_ENTRY_LANG = "?com.dotmarketing.htmlpage.language=1&dotcache=refresh"
 
 
-def it_speech_pdfs(
+def _slug_speaker(surname: str, day: str, variants: list[tuple]) -> str | None:
+    """Member whose surname matches the entry-page slug and covers ``day``.
+
+    Entry-page bodies name the governor only in the footnotes and can cite
+    other members by full name near the top (one 2025 speech greets Makhlouf
+    before any Panetta mention), so the slug is the only trustworthy signal.
+    """
+    s = _norm(surname)
+    for person, _full, last, start, end in variants:
+        if last == s and start <= day <= str(
+            date.fromisoformat(end) + timedelta(days=TENURE_GRACE_DAYS)
+        ):
+            return person
+    return None
+
+
+def it_speech_entries(
     client: httpx.Client, year_from: int = 2015, year_to: int | None = None
 ) -> dict[str, dict]:
-    """{pdf_url: {title, date}} for governor speeches from the per-year pages.
+    """{url: {title, date, kind, speaker}} for governor speeches from the
+    per-year pages.
 
-    Every list item on a year page carries the publication date in a
-    ``bdi-result-date`` div ("10 Dec 2019") — far more reliable than the PDF
-    filenames, which come in a dozen ad-hoc formats. Older years link PDFs
-    directly; recent years link HTML entry pages whose only content is a link
-    to their own PDF (date from the ``/YYYYMMDD-speaker/`` slug). English
-    files are preferred when a day exists in both languages.
+    Two listing layouts. 2015–2024 items link the speech PDF directly
+    (kind="pdf"; text via pypdf). Since 2025 items link an HTML entry page
+    that itself carries the full text (kind="html") — fetched with the
+    English-language dotCMS param, no PDF needed. The entry-page slug
+    (``/YYYYMMDD-surname/``) gives both the speech date and the speaker
+    surname: the page body names the governor only in the footnotes, and
+    the listing's ``bdi-result-date`` is the *publication* date, which can
+    lag the speech date. PDF filenames come in a dozen ad-hoc formats, so
+    PDF dates come from the listing, never the filename. When a day exists
+    in both languages the English file wins; an HTML entry beats any PDF
+    of the same day.
     """
     year_to = year_to or date.today().year
     entries: dict[str, dict] = {}
@@ -424,7 +452,8 @@ def it_speech_pdfs(
         soup = BeautifulSoup(r.text, "html.parser")
         for item in soup.find_all("li"):
             anchors = [
-                a for a in item.find_all("a", href=True)
+                a
+                for a in item.find_all("a", href=True)
                 if ".pdf" in a["href"] and ".epub" not in a["href"]
             ]
             if not anchors:
@@ -433,38 +462,33 @@ def it_speech_pdfs(
             href = a["href"].strip()
             full = href if href.startswith("http") else f"https://www.bancaditalia.it{href}"
             title = a.get_text(" ", strip=True) or item.get_text(" ", strip=True)[:200]
-            entries.setdefault(full, {"title": title, "date": _listing_date(item)})
-        # recent years: HTML entry pages -> their own PDF
+            entries.setdefault(
+                full, {"title": title, "date": _listing_date(item), "kind": "pdf", "speaker": ""}
+            )
+        # 2025 ->: entry pages with the full text in HTML
         for a in soup.find_all("a", href=True):
+            m = re.search(r"/(\d{4})(\d{2})(\d{2})-([a-z-]+)/index\.html", a["href"])
+            if not m:
+                continue
             href = a["href"].strip()
-            if not re.search(r"/(\d{8})-[^/]+/index\.html", href):
-                continue
-            full = href if href.startswith("http") else f"https://www.bancaditalia.it{href}"
-            m = re.search(r"/(\d{4})(\d{2})(\d{2})-", full)
-            day = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-            if any(v.get("date") == day for v in entries.values()):
-                continue  # already captured via the listing item
-            try:
-                r2 = client.get(full)
-                r2.raise_for_status()
-            except httpx.HTTPError:
-                continue
-            s2 = BeautifulSoup(r2.text, "html.parser")
-            h1 = s2.h1.get_text(" ", strip=True) if s2.h1 else a.get_text(" ", strip=True)
-            for a2 in s2.find_all("a", href=True):
-                href2 = a2["href"].strip()
-                if ".pdf" in href2 and ".epub" not in href2:
-                    full2 = (
-                        href2 if href2.startswith("http") else f"https://www.bancaditalia.it{href2}"
-                    )
-                    entries.setdefault(full2, {"title": h1, "date": day})
-                    break
-            time.sleep(0.15)
+            base = href if href.startswith("http") else f"https://www.bancaditalia.it{href}"
+            entries[base + IT_ENTRY_LANG] = {
+                "title": a.get_text(" ", strip=True),
+                "date": f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                "kind": "html",
+                "speaker": m.group(4),
+            }
         time.sleep(0.2)
-    # drop undated; prefer English files when a day exists twice
+
+    # drop undated; one entry per day: html > English pdf > other pdf
     def _is_en(url: str) -> bool:
         name = url.lower().split("/")[-1]
         return name.startswith("en") or name.endswith("_en.pdf")
+
+    def _rank(url: str) -> int:
+        if entries[url]["kind"] == "html":
+            return 0
+        return 1 if _is_en(url) else 2
 
     by_date: dict[str, str] = {}
     for url, meta in entries.items():
@@ -472,9 +496,27 @@ def it_speech_pdfs(
         if not day:
             continue
         cur = by_date.get(day)
-        if cur is None or (_is_en(url) and not _is_en(cur)):
+        if cur is None or _rank(url) < _rank(cur):
             by_date[day] = url
     return {u: entries[u] for u in by_date.values()}
+
+
+def _prefer_it_html(rows: list[dict], fetched_urls: dict[str, str]) -> list[dict]:
+    """Drop IT PDF rows whose day now has an HTML row (2025-> relaunch).
+
+    The corpus was first harvested via PDFs, including the entry-page years;
+    once those days are covered by parsed HTML the PDF rows are redundant
+    and are retired (marked ``superseded-by-html`` in the resume index so
+    they are never re-fetched).
+    """
+    html_days = {r["date"] for r in rows if r["source"] == "it" and ".html" in r["url"]}
+    kept: list[dict] = []
+    for r in rows:
+        if r["source"] == "it" and ".pdf" in r["url"] and r["date"] in html_days:
+            fetched_urls.setdefault(r["url"], "superseded-by-html")
+            continue
+        kept.append(r)
+    return kept
 
 
 def _it_pdf_date(url: str) -> str | None:
@@ -605,37 +647,57 @@ def collect(
         ).write_parquet(FETCHED_PATH)
 
     with _client() as client:
-        for site in (sites if sites is not None else NCB_SITES):
+        for site in sites if sites is not None else NCB_SITES:
             urls = discover_urls(site, client)
             stats.append(_harvest(site["code"], urls))
         if include_blog:
             stats.append(_harvest("ecb_blog", ecb_blog_urls()))
         if include_it:
-            pdfs = it_speech_pdfs(client)
+            entries = it_speech_entries(client)
             st = SiteStats(code="it")
-            st.n_urls_discovered = len(pdfs)
-            for u in sorted(pdfs):
+            st.n_urls_discovered = len(entries)
+            for u, meta in sorted(entries.items()):
                 if u in fetched_urls:
                     continue
                 try:
                     r = client.get(u)
                     r.raise_for_status()
-                    page = parse_speech_pdf(r.content, u, pdfs[u]["title"], pdfs[u]["date"])
+                    if meta["kind"] == "html":
+                        page = parse_speech_page(r.text, u)
+                        if page:
+                            # the slug is the speech date; page chrome can
+                            # carry an unrelated visible date (batch-updated
+                            # "published" stamps)
+                            page["date"] = meta["date"]
+                            # entry pages name the governor only in the
+                            # footnotes — the surname comes from the slug
+                            if meta.get("speaker") and not page["author"]:
+                                page["author"] = meta["speaker"]
+                            page["title"] = re.sub(r"^Banca d.Italia\s*[-–—]\s*", "", page["title"])
+                    else:
+                        page = parse_speech_pdf(r.content, u, meta["title"], meta["date"])
                 except httpx.HTTPError as exc:
                     fetched_urls[u] = f"http-error:{type(exc).__name__}"
                     st.n_fetched += 1
                     if len(st.errors) < 3:
                         st.errors.append(f"{u}: {exc}")
                     continue
-                if page is None:
-                    fetched_urls[u] = "no-date-or-unparsable-pdf"
+                if page is None or len(page["text"]) < 400:
+                    fetched_urls[u] = (
+                        "no-date-or-too-short" if meta["kind"] == "html" else "unparsable-pdf"
+                    )
                     st.n_fetched += 1
                     continue
                 if date.fromisoformat(page["date"]) < DATE_FROM:
                     fetched_urls[u] = "before-2015"
                     st.n_fetched += 1
                     continue
-                person = match_speaker(page, variants)
+                if meta["kind"] == "html" and meta.get("speaker"):
+                    person = _slug_speaker(
+                        meta["speaker"], page["date"], variants
+                    ) or match_speaker(page, variants)
+                else:
+                    person = match_speaker(page, variants)
                 fetched_urls[u] = f"matched:{person}" if person else "no-member-match"
                 if person:
                     rows.append(
@@ -655,6 +717,7 @@ def collect(
                 if st.n_fetched % 100 == 0:
                     _flush(rows, fetched_urls)
             stats.append(st)
+            rows = _prefer_it_html(rows, fetched_urls)
 
     for st in stats:
         print(

@@ -56,7 +56,8 @@
   section omitted when none qualifies)
 - [x] NCB governor speeches: harvested directly from NCB websites
   (bundesbank, banque-de-france, bde, suomenpankki, nbs, eestipank) + ECB
-  blog via foedb + Banca d'Italia governor PDFs — `collectors/ncb_websites.py`
+  blog via foedb + Banca d'Italia governor speeches (HTML entry pages
+  2025→, PDFs 2015–24) — `collectors/ncb_websites.py`
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
