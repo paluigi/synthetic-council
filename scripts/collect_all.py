@@ -31,12 +31,17 @@ def main() -> None:
         f"span={res.first_decision}..{res.last_decision}"
     )
 
-    step("2/9 speeches: ECB all-speeches CSV + BIS governor speeches")
-    from synthetic_council.collectors import ncb_speeches, speeches
+    step("2/9 speeches: ECB CSV + BIS hub + NCB websites + ECB blog")
+    from synthetic_council.collectors import ncb_speeches, ncb_websites, speeches
 
     sp = speeches.collect()
     print(sp)
     print(ncb_speeches.collect())
+    ncb_df = ncb_websites.collect()
+    print(
+        f"ncb-web speeches={ncb_df.height} "
+        f"persons={ncb_df['speaker'].n_unique() if ncb_df.height else 0}"
+    )
 
     step("3/9 memberships: Wayback GC-members page snapshots")
     if not skip_members:

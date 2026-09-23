@@ -1,4 +1,5 @@
-"""Union speech corpus (ECB CSV + BIS hub) + strict-window latest-speech join.
+"""Union speech corpus (ECB CSV + BIS hub + NCB websites + ECB blog) +
+strict-window latest-speech join.
 
 For each GC monetary policy meeting and each member attending it, the
 member's latest speech delivered **after the previous monetary policy meeting
@@ -23,10 +24,11 @@ from synthetic_council.config import PROCESSED_DIR, RAW_DIR
 OUT_PATH = PROCESSED_DIR / "latest_speech_per_meeting.parquet"
 ECB_PATH = RAW_DIR / "speeches" / "speeches.parquet"
 BIS_PATH = RAW_DIR / "speeches" / "bis_speeches.parquet"
+NCB_WEB_PATH = RAW_DIR / "speeches" / "ncb_web_speeches.parquet"
 
 
 def union_corpus() -> pl.DataFrame:
-    """ECB all-speeches CSV + BIS hub speeches, normalised to one schema."""
+    """ECB CSV + BIS hub + NCB websites + ECB blog, normalised to one schema."""
     ecb = (
         pl.read_parquet(ECB_PATH)
         .with_columns(
@@ -40,13 +42,17 @@ def union_corpus() -> pl.DataFrame:
         )
     )
     frames = [ecb.select("date", "speaker", "title", "contents", "source", "url")]
-    if BIS_PATH.exists():
-        bis = pl.read_parquet(BIS_PATH).with_columns(
-            pl.lit("bis").alias("source"),
+    for path, default_source in ((BIS_PATH, "bis"), (NCB_WEB_PATH, None)):
+        if not path.exists():
+            continue
+        other = pl.read_parquet(path)
+        if "source" not in other.columns:
+            other = other.with_columns(pl.lit(default_source).alias("source"))
+        other = other.with_columns(
             pl.col("speaker").map_elements(canonicalise, return_dtype=pl.String),
             pl.col("date").cast(pl.String).str.to_date("%Y-%m-%d"),
         )
-        frames.append(bis.select("date", "speaker", "title", "contents", "source", "url"))
+        frames.append(other.select("date", "speaker", "title", "contents", "source", "url"))
     df = pl.concat(frames, how="vertical")
     return (
         df.filter(pl.col("contents").str.len_bytes() > 200)

@@ -79,8 +79,8 @@ Every dataset documents its endpoints, discovery path and verification in
 | `account_participants.parquet` | 2,366 meeting×member rows | 2015 → 2026 | accounts attendees + voting rights (asterisks) |
 | `account_ce_proposal.parquet` | 96 proposals (69 deterministic) | 2015 → 2026 | accounts §1 (regex; LLM fallback flagged) |
 | `account_decision_mode.parquet` | unanimity/consensus/majority + probs | 2015 → 2026 | Jev over LLM-curated §2 evidence |
-| `speeches.parquet` | 3,052 (ECB) + 47 (BIS) | 1997 → 2026-09 | ECB speeches CSV + BIS hub |
-| `latest_speech_per_meeting.parquet` | 453 links, strict window | 2015 → 2026 | speech_union (ECB + BIS) |
+| `speeches.parquet` | 3,052 (ECB) + 47 (BIS) + NCB-web/blog harvest | 1997 → 2026-09 | ECB CSV + BIS hub + NCB websites + ECB blog |
+| `latest_speech_per_meeting.parquet` | strict window (see speech_union) | 2015 → 2026 | union of all speech corpora |
 | `macro_asof_panel.parquet` | ~39.5k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + CISS + DG-ECFIN |
 | `staff_projections.parquet` | 161,066 | 2000 → 2026 | ECB MPD |
 | `memos_ea/` + `memos_ea_country/` | 5,200 briefings each | 2004 → 2026 | assembled (experiment arms) |

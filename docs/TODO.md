@@ -54,7 +54,11 @@
   verified facts, one reviewable .md per member (scripts/build_profiles.py)
 - [x] Strict-window speech stance sections (speech after previous GC only;
   section omitted when none qualifies)
-- [ ] NCB governor speeches: BIS hub coverage is thin post-redesign
-  (47 speeches by our members); harvest NCB websites directly
+- [x] NCB governor speeches: harvested directly from NCB websites
+  (bundesbank, banque-de-france, bde, suomenpankki, nbs, eestipank) + ECB
+  blog via foedb — `collectors/ncb_websites.py` (sitemap-first, JSON-LD
+  parsing, tenure-based speaker matching). Remaining gaps documented in
+  docs/data-sources/ncb-websites.md (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/
+  AT; PDF-only: IT; bot-blocked: NL/PT/GR/LT; unreachable: CY/MT)
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
 - [ ] CI on push (pytest + ruff)

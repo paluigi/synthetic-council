@@ -51,8 +51,10 @@ previous monetary policy meeting and on/before the current one** (window
 `(prev_gc, gc]`). A speech qualifies for at most one meeting, so the
 extracted stance sections (`member_profiles/speech_sections.py`, one LLM
 call per (member, meeting), saved under `data/processed/speech_sections/`)
-are stable and reusable across memo rebuilds. Current join: 453 (member,
-meeting) links over 92 meetings (437 ECB + 16 BIS).
+are stable and reusable across memo rebuilds. Current join: 576 (member,
+meeting) links over 92 meetings — 410 ECB CSV + 39 ECB blog + 50 FI + 30 FR +
+27 DE + 16 BIS + 4 EE; governor links went from 83 (49 meetings) to 196 (74
+meetings) once NCB websites were harvested (see `ncb-websites.md`).
 
 ## Decision-mode evidence (`mpa_extract/decision_mode.py`)
 
