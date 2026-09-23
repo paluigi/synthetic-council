@@ -37,6 +37,11 @@ def main() -> None:
     sp = speeches.collect()
     print(sp)
     print(ncb_speeches.collect())
+    bis_df = ncb_speeches.collect_from_sitemap()
+    print(
+        f"bis speeches={bis_df.height} "
+        f"persons={bis_df['speaker'].n_unique() if bis_df.height else 0}"
+    )
     ncb_df = ncb_websites.collect()
     print(
         f"ncb-web speeches={ncb_df.height} "

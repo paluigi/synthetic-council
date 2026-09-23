@@ -65,6 +65,20 @@
   sources — `collectors/cbs_speeches.py`; strict-window join 647 → 1,187
   links over 92 meetings. 2024→ for those NCBs remains open (dataset ends
   2023-12)
+- [x] BIS hub sitemap recrawl (2024→): the redesigned hub's listing is a
+  curated ~750-speech subset and its keyword search is broken, but
+  bis.org's sitemap lists every speech page — 383 new full texts by 28
+  members incl. all gap-country governors and the new generation
+  (Knot 32, Makhlouf 47, Stournaras 26, Escrivá 12, Sleijpen 11, Radev 7,
+  Holzmann 6, Vasle 4, Šimkus 3, Wunsch 3, Vujčić 3 …) —
+  `collectors/ncb_speeches.py::collect_from_sitemap`; post-tenure purge
+  for legacy listing-walk rows (ex-governors speaking as BIS management).
+  Join 1,187 → 1,304 links. Remaining for the news layer (TinyFish, key
+  pending): PT/LU interviews and one-off gaps
+- [ ] TinyFish news layer for post-2023 gaps BIS lacks (PT, LU,
+  one-offs): search with after/before date windows + fetch, labelled as
+  press coverage rather than verbatim speech — blocked on
+  TINYFISH_API_KEY in .env.local
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;

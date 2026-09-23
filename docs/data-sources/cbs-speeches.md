@@ -12,9 +12,13 @@ carry a Microsoft-translation English `text` alongside `text_original`.
 
 It closes the governor-speech gap at NCBs we cannot harvest directly
 (JS-rendered, bot-blocked or unreachable sites — see ncb-websites.md),
-**for 2015–2023 only**: the dataset ends 2023-12, so 2024→ remains
-uncovered for those countries. It also adds speeches at harvestable NCBs
-that our own crawlers miss (BIS-era back-catalogue: FR +180, ES +165,
+**for 2015–2023 only**: the dataset ends 2023-12. 2024→ is covered by the
+BIS sitemap recrawl (`ncb_speeches.collect_from_sitemap`) where the hub
+carries the speech — most gap governors' full texts, incl. new-era
+governors (Escrivá, Sleijpen, Patsalides, Kocher) — with news-layer
+search (TinyFish, planned) left for what BIS lacks: PT interviews,
+Luxembourg, and one-off speeches. CBS also adds speeches at harvestable
+NCBs that our own crawlers miss (BIS-era back-catalogue: FR +180, ES +165,
 DE +187 across Weidmann/Nagel, IT +42).
 
 ## Pipeline
@@ -55,8 +59,9 @@ meeting 7.0 → 12.9.
 
 ## Caveats
 
-- **2024→ not covered** — the 14 hard-gap NCBs have no speeches after
-  2023-12. The authors plan periodic updates; re-run
+- **2024→ falls to the BIS recrawl** — after `collect_from_sitemap`, the
+  remaining CBS-side holes are Luxembourg (3 rows ever) and thin PT/BG/CY
+  interview coverage. The authors plan periodic updates; re-run
   `python -m synthetic_council.collectors.cbs_speeches` when a new
   version appears (update `CBS_CSV_URL`).
 - Luxembourg is nearly absent (3 rows); Belgium thin (13 Wunsch + 5

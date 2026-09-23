@@ -62,7 +62,9 @@ top: 1,187 links, 12.9 per meeting (see cbs-speeches.md).
 
 Future work: per-site JS rendering or the sites' internal JSON APIs. For
 2015–2023 these gaps are closed by the CBS dataset (see cbs-speeches.md);
-2024→ remains open for the countries listed above. Coverage note:
+2024→ is largely covered by the BIS sitemap recrawl
+(`ncb_speeches.collect_from_sitemap`), with a planned TinyFish news layer
+for what remains (PT, LU, one-offs). Coverage note:
 the ECB CSV already covers Executive Board
 members fully, so the gap is governors of the skipped countries only; the
 strict-window join simply omits the speech section for meetings without a
