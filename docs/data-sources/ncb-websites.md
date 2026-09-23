@@ -41,10 +41,12 @@ staff) fall out via the speaker matching.
 | sk | nbs.sk | 5 | 0 | Kazimír slugs exist but pages parse without dates |
 | ee | eestipank.ee | 8 | 5 | `/en/press/speech…` |
 | ecb_blog | ecb.europa.eu | 252 | 88 | foedb-enumerated, member-filtered |
+| it | bancaditalia.it | 230 | 218 | governor speeches per year page (`pubblicazioni/interventi-governatore`): each list item carries its date; older years link PDFs directly, recent years link entry pages whose only content is a link to their own PDF. Text via pypdf; English files preferred per date. PDF filenames come in a dozen ad-hoc formats, so dates come from the listing, never the filename |
 
-Final corpus: 371 speeches by 27 members, 2015-03 → 2026-09. Combined effect
-on the strict-window join: 576 links over 92 meetings (was 453), governor
-links 83 → 196, governor-covered meetings 49 → 74 of 92.
+Final corpus: 589 speeches by 28 members, 2015-01 → 2026-09. Combined effect
+on the strict-window join: 646 links over 92 meetings (was 453 before NCB
+harvesting), governor links 83 → 266, mean members-with-speech per meeting
+4.9 → 7.0.
 
 ## Documented gaps (2026-09) — why each site is skipped
 
@@ -53,9 +55,6 @@ links 83 → 196, governor-covered meetings 49 → 74 of 92.
   pages), SI (bsi.si), LV (bank.lv sitemap has no EN speech pages), BG, LU,
   HR (robots points at a `localhost` sitemap), AT (oenb.at is an SPA — every
   path returns a soft-404 shell).
-- **IT (bancaditalia.it)**: speeches sit on agenda *event* pages whose HTML
-  carries only boilerplate (speech text is in linked PDFs) — would need PDF
-  extraction.
 - **Bot protection (HTTP 403)**: NL (dnb.nl), PT (bportugal.pt), GR
   (bankofgreece.gr), LT (lb.lt).
 - **Unreachable from this host**: CY, MT.

@@ -147,3 +147,48 @@ class TestSpeakerMatching:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+class TestBancaDItalia:
+    def test_pdf_date_fallback_patterns(self):
+        assert (
+            nw._it_pdf_date("https://x/integov2019/en-VISCO_10.12.2019.pdf?language_id=1")
+            == "2019-12-10"
+        )
+        assert (
+            nw._it_pdf_date("https://x/20260921-panetta/en-panetta-21-09-2026.pdf")
+            == "2026-09-21"
+        )
+        assert nw._it_pdf_date("https://x/no-date-here.pdf") is None
+
+    def test_listing_date_parses_abbreviated_months(self):
+        from bs4 import BeautifulSoup
+
+        html = (
+            '<li><div class="bdi-result-date">Data Pubblicazione: 10 Dec 2019 </div>'
+            '<div><a class="bdi-result-title" href="/x/en-VISCO_10.12.2019.pdf">'
+            "Conference title</a></div></li>"
+        )
+        item = BeautifulSoup(html, "html.parser").li
+        # reuse the inner parser through a tiny harness
+        prefixes = "|".join(m[:3] for m in nw._MONTHS)
+        m = nw.re.search(
+            rf"(\d{{1,2}})\s+({prefixes})\w*\s+(\d{{4}})",
+            item.find(class_="bdi-result-date").get_text(" ", strip=True),
+            nw.re.IGNORECASE,
+        )
+        month_no = {mm[:3].lower(): i for mm, i in nw._MONTHS.items()}[m.group(2).lower()]
+        assert nw.date(int(m.group(3)), month_no, int(m.group(1))) == nw.date(2019, 12, 10)
+
+    def test_parse_speech_pdf_needs_text(self, tmp_path):
+        from pypdf import PdfWriter
+
+        w = PdfWriter()
+        w.add_blank_page(200, 200)
+        p = tmp_path / "s.pdf"
+        with open(p, "wb") as fh:
+            w.write(fh)
+        got = nw.parse_speech_pdf(
+            p.read_bytes(), "https://x/en-x-01-01-2024.pdf", "t", "2024-01-01"
+        )
+        assert got is None

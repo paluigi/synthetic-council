@@ -56,9 +56,10 @@
   section omitted when none qualifies)
 - [x] NCB governor speeches: harvested directly from NCB websites
   (bundesbank, banque-de-france, bde, suomenpankki, nbs, eestipank) + ECB
-  blog via foedb — `collectors/ncb_websites.py` (sitemap-first, JSON-LD
-  parsing, tenure-based speaker matching). Remaining gaps documented in
-  docs/data-sources/ncb-websites.md (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/
-  AT; PDF-only: IT; bot-blocked: NL/PT/GR/LT; unreachable: CY/MT)
+  blog via foedb + Banca d'Italia governor PDFs — `collectors/ncb_websites.py`
+  (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
+  PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
+  (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
+  unreachable: CY/MT; stale-sitemap: ES)
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
 - [ ] CI on push (pytest + ruff)

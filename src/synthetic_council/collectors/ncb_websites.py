@@ -373,13 +373,162 @@ def match_speaker(
     return None
 
 
+# --- Banca d'Italia: governor speeches per-year listing (PDF corpus) -------
+
+IT_YEAR_URL = (
+    "https://www.bancaditalia.it/pubblicazioni/interventi-governatore/"
+    "integov{year}/index.html?com.dotmarketing.htmlpage.language=1&dotcache=refresh"
+)
+
+
+def it_speech_pdfs(
+    client: httpx.Client, year_from: int = 2015, year_to: int | None = None
+) -> dict[str, dict]:
+    """{pdf_url: {title, date}} for governor speeches from the per-year pages.
+
+    Every list item on a year page carries the publication date in a
+    ``bdi-result-date`` div ("10 Dec 2019") — far more reliable than the PDF
+    filenames, which come in a dozen ad-hoc formats. Older years link PDFs
+    directly; recent years link HTML entry pages whose only content is a link
+    to their own PDF (date from the ``/YYYYMMDD-speaker/`` slug). English
+    files are preferred when a day exists in both languages.
+    """
+    year_to = year_to or date.today().year
+    entries: dict[str, dict] = {}
+
+    def _listing_date(item) -> str | None:
+        d = item.find(class_="bdi-result-date")
+        if not d:
+            return None
+        # months appear both abbreviated ("10 Dec 2019") and in full
+        prefixes = "|".join(m[:3] for m in _MONTHS)
+        m = re.search(
+            rf"(\d{{1,2}})\s+({prefixes})\w*\s+(\d{{4}})",
+            d.get_text(" ", strip=True),
+            re.IGNORECASE,
+        )
+        if not m:
+            return None
+        month_no = {mm[:3].lower(): i for mm, i in _MONTHS.items()}[m.group(2).lower()]
+        try:
+            return str(date(int(m.group(3)), month_no, int(m.group(1))))
+        except ValueError:
+            return None
+
+    for year in range(year_from, year_to + 1):
+        try:
+            r = client.get(IT_YEAR_URL.format(year=year))
+            r.raise_for_status()
+        except httpx.HTTPError:
+            continue
+        soup = BeautifulSoup(r.text, "html.parser")
+        for item in soup.find_all("li"):
+            anchors = [
+                a for a in item.find_all("a", href=True)
+                if ".pdf" in a["href"] and ".epub" not in a["href"]
+            ]
+            if not anchors:
+                continue
+            a = anchors[0]
+            href = a["href"].strip()
+            full = href if href.startswith("http") else f"https://www.bancaditalia.it{href}"
+            title = a.get_text(" ", strip=True) or item.get_text(" ", strip=True)[:200]
+            entries.setdefault(full, {"title": title, "date": _listing_date(item)})
+        # recent years: HTML entry pages -> their own PDF
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not re.search(r"/(\d{8})-[^/]+/index\.html", href):
+                continue
+            full = href if href.startswith("http") else f"https://www.bancaditalia.it{href}"
+            m = re.search(r"/(\d{4})(\d{2})(\d{2})-", full)
+            day = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+            if any(v.get("date") == day for v in entries.values()):
+                continue  # already captured via the listing item
+            try:
+                r2 = client.get(full)
+                r2.raise_for_status()
+            except httpx.HTTPError:
+                continue
+            s2 = BeautifulSoup(r2.text, "html.parser")
+            h1 = s2.h1.get_text(" ", strip=True) if s2.h1 else a.get_text(" ", strip=True)
+            for a2 in s2.find_all("a", href=True):
+                href2 = a2["href"].strip()
+                if ".pdf" in href2 and ".epub" not in href2:
+                    full2 = (
+                        href2 if href2.startswith("http") else f"https://www.bancaditalia.it{href2}"
+                    )
+                    entries.setdefault(full2, {"title": h1, "date": day})
+                    break
+            time.sleep(0.15)
+        time.sleep(0.2)
+    # drop undated; prefer English files when a day exists twice
+    def _is_en(url: str) -> bool:
+        name = url.lower().split("/")[-1]
+        return name.startswith("en") or name.endswith("_en.pdf")
+
+    by_date: dict[str, str] = {}
+    for url, meta in entries.items():
+        day = meta.get("date")
+        if not day:
+            continue
+        cur = by_date.get(day)
+        if cur is None or (_is_en(url) and not _is_en(cur)):
+            by_date[day] = url
+    return {u: entries[u] for u in by_date.values()}
+
+
+def _it_pdf_date(url: str) -> str | None:
+    """ISO date from a Banca d'Italia PDF filename.
+
+    Two layouts: ``en-VISCO_10.12.2019.pdf`` and
+    ``en-panetta-21-09-2026.pdf`` — both DD MM YYYY.
+    """
+    name = url.split("/")[-1]
+    m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})", name) or re.search(
+        r"(\d{2})-(\d{2})-(\d{4})\.pdf", name
+    )
+    if not m:
+        return None
+    dd, mm, yyyy = m.groups()
+    try:
+        return str(date(int(yyyy), int(mm), int(dd)))
+    except ValueError:
+        return None
+
+
+def parse_speech_pdf(content: bytes, url: str, title_hint: str = "", day: str = "") -> dict | None:
+    """(date, title, text) from a speech PDF (pypdf).
+
+    ``day`` (ISO) comes from the listing item or entry-page slug — the PDF
+    filenames themselves come in a dozen ad-hoc formats and are not trusted.
+    """
+    import io
+
+    from pypdf import PdfReader
+
+    if not day:
+        day = _it_pdf_date(url) or ""
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        text = "\n".join((p.extract_text() or "") for p in reader.pages)
+    except Exception:  # corrupt / scanned PDFs
+        return None
+    text = text.strip()
+    if len(text) < 400 or not day:
+        return None
+    return {"url": url, "title": title_hint[:300], "date": day, "author": "", "text": text}
+
+
 # --- collection ----------------------------------------------------------------
 
 
 def collect(
-    sites: list[dict] | None = None, sleep_s: float = SLEEP_S, include_blog: bool = True
+    sites: list[dict] | None = None,
+    sleep_s: float = SLEEP_S,
+    include_blog: bool = True,
+    include_it: bool = True,
 ) -> pl.DataFrame:
-    """Harvest all configured sites (+ the ECB blog); resumable."""
+    """Harvest all configured sites (+ the ECB blog + Banca d'Italia); resumable."""
     variants = _person_variants()
     speeches = pl.read_parquet(OUT_PATH) if OUT_PATH.exists() else pl.DataFrame()
     fetched = pl.read_parquet(FETCHED_PATH) if FETCHED_PATH.exists() else None
@@ -456,11 +605,56 @@ def collect(
         ).write_parquet(FETCHED_PATH)
 
     with _client() as client:
-        for site in sites or NCB_SITES:
+        for site in (sites if sites is not None else NCB_SITES):
             urls = discover_urls(site, client)
             stats.append(_harvest(site["code"], urls))
         if include_blog:
             stats.append(_harvest("ecb_blog", ecb_blog_urls()))
+        if include_it:
+            pdfs = it_speech_pdfs(client)
+            st = SiteStats(code="it")
+            st.n_urls_discovered = len(pdfs)
+            for u in sorted(pdfs):
+                if u in fetched_urls:
+                    continue
+                try:
+                    r = client.get(u)
+                    r.raise_for_status()
+                    page = parse_speech_pdf(r.content, u, pdfs[u]["title"], pdfs[u]["date"])
+                except httpx.HTTPError as exc:
+                    fetched_urls[u] = f"http-error:{type(exc).__name__}"
+                    st.n_fetched += 1
+                    if len(st.errors) < 3:
+                        st.errors.append(f"{u}: {exc}")
+                    continue
+                if page is None:
+                    fetched_urls[u] = "no-date-or-unparsable-pdf"
+                    st.n_fetched += 1
+                    continue
+                if date.fromisoformat(page["date"]) < DATE_FROM:
+                    fetched_urls[u] = "before-2015"
+                    st.n_fetched += 1
+                    continue
+                person = match_speaker(page, variants)
+                fetched_urls[u] = f"matched:{person}" if person else "no-member-match"
+                if person:
+                    rows.append(
+                        {
+                            "date": page["date"],
+                            "speaker": person,
+                            "author_text": page["author"],
+                            "title": page["title"],
+                            "url": u,
+                            "contents": page["text"],
+                            "source": "it",
+                        }
+                    )
+                    st.n_matched += 1
+                st.n_fetched += 1
+                time.sleep(sleep_s)
+                if st.n_fetched % 100 == 0:
+                    _flush(rows, fetched_urls)
+            stats.append(st)
 
     for st in stats:
         print(
@@ -476,8 +670,9 @@ if __name__ == "__main__":
     import sys
 
     codes = sys.argv[1:]
-    sites = [s for s in NCB_SITES if not codes or s["code"] in codes]
-    df = collect(sites=sites)
+    sites = [s for s in NCB_SITES if not codes or s["code"] in codes] or None
+    include_it = not codes or "it" in codes
+    df = collect(sites=sites, include_it=include_it)
     print(
         f"NCB web speeches: {df.height} | persons={df['speaker'].n_unique()} | "
         f"span={df['date'].min()}..{df['date'].max()}"
