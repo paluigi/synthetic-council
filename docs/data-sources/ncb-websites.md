@@ -43,10 +43,11 @@ staff) fall out via the speaker matching.
 | ecb_blog | ecb.europa.eu | 252 | 88 | foedb-enumerated, member-filtered |
 | it | bancaditalia.it | 230 | 220 | governor speeches per year page (`pubblicazioni/interventi-governatore`). 2015–2024 items link the speech PDF directly (text via pypdf; dates from the listing's `bdi-result-date`, never the filename; English files preferred per date). Since 2025 items link an HTML entry page that carries the full text — fetched with the English-language dotCMS param, no PDF involved. For those, the `/YYYYMMDD-surname/` slug is authoritative for both the speech date (page chrome carries unrelated batch-updated "published" stamps) and the speaker (the body names the governor only in the footnotes and can greet another member by full name near the top) |
 
-Final corpus: 591 speeches by 28 members, 2015-01 → 2026-09. Combined effect
-on the strict-window join: 647 links over 92 meetings (was 453 before NCB
-harvesting), governor links 83 → 266, mean members-with-speech per meeting
-4.9 → 7.0.
+Final corpus: 591 speeches by 28 members, 2015-01 → 2026-09. Combined
+effect on the strict-window join (before the CBS source was added): 646 →
+647 links over 92 meetings (was 453 before NCB harvesting), governor links
+83 → 266, mean members-with-speech per meeting 4.9 → 7.0. With CBS on
+top: 1,187 links, 12.9 per meeting (see cbs-speeches.md).
 
 ## Documented gaps (2026-09) — why each site is skipped
 
@@ -59,8 +60,9 @@ harvesting), governor links 83 → 266, mean members-with-speech per meeting
   (bankofgreece.gr), LT (lb.lt).
 - **Unreachable from this host**: CY, MT.
 
-Future work: per-site JS rendering or the sites' internal JSON APIs. PDF
-extraction for IT survives only for the 2015–2024 listings. Coverage note:
+Future work: per-site JS rendering or the sites' internal JSON APIs. For
+2015–2023 these gaps are closed by the CBS dataset (see cbs-speeches.md);
+2024→ remains open for the countries listed above. Coverage note:
 the ECB CSV already covers Executive Board
 members fully, so the gap is governors of the skipped countries only; the
 strict-window join simply omits the speech section for meetings without a

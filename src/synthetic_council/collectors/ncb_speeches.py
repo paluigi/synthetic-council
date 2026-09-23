@@ -130,14 +130,10 @@ def _walk_listing(
         for c in cards:
             for person in persons:
                 if _author_matches(c["author"], person):
-                    by_person[person][c["url"]] = {
-                        **c, "person": canonicalise(person)
-                    }
+                    by_person[person][c["url"]] = {**c, "person": canonicalise(person)}
                     break
         time.sleep(sleep_s)
-    return {
-        u: card for cards in by_person.values() for u, card in cards.items()
-    }
+    return {u: card for cards in by_person.values() for u, card in cards.items()}
 
 
 def _search(client: httpx.Client, query: str, max_pages: int, sleep_s: float) -> list[dict]:
@@ -206,8 +202,12 @@ def collect(
             rows.setdefault(url, {**card})
         n_pages += len(walked)
         log.append(
-            {"person": "(listing-walk)", "query": "-", "n_cards": len(walked),
-             "n_matched": len(walked)}
+            {
+                "person": "(listing-walk)",
+                "query": "-",
+                "n_cards": len(walked),
+                "n_matched": len(walked),
+            }
         )
         for person in persons:
             matched: dict[str, dict] = {}

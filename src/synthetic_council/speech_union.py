@@ -25,10 +25,13 @@ OUT_PATH = PROCESSED_DIR / "latest_speech_per_meeting.parquet"
 ECB_PATH = RAW_DIR / "speeches" / "speeches.parquet"
 BIS_PATH = RAW_DIR / "speeches" / "bis_speeches.parquet"
 NCB_WEB_PATH = RAW_DIR / "speeches" / "ncb_web_speeches.parquet"
+CBS_PATH = RAW_DIR / "speeches" / "cbs_speeches.parquet"
 
 
 def union_corpus() -> pl.DataFrame:
-    """ECB CSV + BIS hub + NCB websites + ECB blog, normalised to one schema."""
+    """ECB CSV + BIS hub + NCB websites + ECB blog + CBS, normalised to one
+    schema. CBS rows are pre-deduplicated against the primary sources on
+    (speaker, date) inside their own collector."""
     ecb = (
         pl.read_parquet(ECB_PATH)
         .with_columns(
@@ -42,7 +45,7 @@ def union_corpus() -> pl.DataFrame:
         )
     )
     frames = [ecb.select("date", "speaker", "title", "contents", "source", "url")]
-    for path, default_source in ((BIS_PATH, "bis"), (NCB_WEB_PATH, None)):
+    for path, default_source in ((BIS_PATH, "bis"), (NCB_WEB_PATH, None), (CBS_PATH, "cbs")):
         if not path.exists():
             continue
         other = pl.read_parquet(path)

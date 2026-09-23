@@ -58,6 +58,13 @@
   (bundesbank, banque-de-france, bde, suomenpankki, nbs, eestipank) + ECB
   blog via foedb + Banca d'Italia governor speeches (HTML entry pages
   2025→, PDFs 2015–24) — `collectors/ncb_websites.py`
+- [x] CBS dataset (Campiglio et al. 2025) as speech source for the
+  unharvestable NCBs (JS-rendered / bot-blocked / unreachable), 2015–2023
+  only: 1,482 governor speeches by 37 members after tolerant name
+  matching (CSV deletes diacritics), (person, day) dedup vs primary
+  sources — `collectors/cbs_speeches.py`; strict-window join 647 → 1,187
+  links over 92 meetings. 2024→ for those NCBs remains open (dataset ends
+  2023-12)
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;

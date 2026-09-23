@@ -31,8 +31,8 @@ def main() -> None:
         f"span={res.first_decision}..{res.last_decision}"
     )
 
-    step("2/9 speeches: ECB CSV + BIS hub + NCB websites + ECB blog")
-    from synthetic_council.collectors import ncb_speeches, ncb_websites, speeches
+    step("2/9 speeches: ECB CSV + BIS hub + NCB websites + ECB blog + CBS")
+    from synthetic_council.collectors import cbs_speeches, ncb_speeches, ncb_websites, speeches
 
     sp = speeches.collect()
     print(sp)
@@ -41,6 +41,11 @@ def main() -> None:
     print(
         f"ncb-web speeches={ncb_df.height} "
         f"persons={ncb_df['speaker'].n_unique() if ncb_df.height else 0}"
+    )
+    cbs_df = cbs_speeches.build()
+    print(
+        f"cbs speeches={cbs_df.height} persons={cbs_df['speaker'].n_unique()} "
+        f"translated={cbs_df['translated'].sum()}"
     )
 
     step("3/9 memberships: Wayback GC-members page snapshots")

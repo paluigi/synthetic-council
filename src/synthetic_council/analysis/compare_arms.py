@@ -203,9 +203,7 @@ def build_report(df: pl.DataFrame) -> str:
         lines.append(f"- mean Δ P(aligned with simulated decision): {mean_d:+.4f}")
         lines.append(f"- bootstrap 95% CI: [{lo:+.4f}, {hi:+.4f}]")
         lines.append(f"- exact sign test p-value: {_sign_test(diffs):.4f}")
-        lines.append(
-            "- positive Δ ⇒ the country annex increases internal alignment"
-        )
+        lines.append("- positive Δ ⇒ the country annex increases internal alignment")
         lines.append("")
 
     # (b) decision-mode match vs ground truth
