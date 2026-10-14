@@ -224,3 +224,4 @@ __pycache__/
 
 # Local secrets (AI gateway key)
 .env.local
+.zcode/
