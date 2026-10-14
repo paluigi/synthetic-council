@@ -1,0 +1,36 @@
+# Inference configuration: endpoints and model roles.
+#
+# Providers and models are chosen HERE, never in code. API keys stay in
+# .env.local under the names given by `api_key_env` — nothing secret is
+# checked in. Roles may carry any sampling parameters (temperature,
+# top_p, max_tokens, retries) and an `api` selector; they flow to the API
+# call and into every experiment archive (payload.json settings block,
+# messages.jsonl events).
+
+[endpoints.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+# decision models (Clef) are served on the alpha decisions endpoint, not
+# chat/completions — live-verified: OpenRouter answers 400 otherwise
+decisions_url = "https://openrouter.ai/api/alpha/decisions"
+
+[endpoints.featherless]
+base_url = "https://api.featherless.ai/v1"
+api_key_env = "FEATHERLESS_API_KEY"
+
+# Agent statements, memo speech sections, decision-mode evidence
+# curation, profile synthesis.
+[roles.generator]
+endpoint = "featherless"
+model = "zai-org/GLM-5.3-Flash"
+temperature = 0.7
+
+# Position/conviction extraction, alignment, decision modes (ground truth
+# and simulated). cloudflare/clef is Cloudflare's open-source 27B decision
+# model; api = "decisions" uses OpenRouter's native Jev-style decisions
+# endpoint (full probability distributions + score questions with rubric
+# legends + confidence) instead of prompted chat.
+[roles.extractor]
+endpoint = "openrouter"
+model = "cloudflare/clef"
+api = "decisions"

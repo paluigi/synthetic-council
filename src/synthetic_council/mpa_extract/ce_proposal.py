@@ -140,6 +140,7 @@ def extract_one(meeting_date: str, markdown: str, use_llm_fallback: bool = True)
             answer = chat(
                 _FALLBACK_SYSTEM.format(ce=ce, ce_short=f"Mr {surname}"),
                 markdown,
+                context="ce_proposal",
             ).strip()
         except Exception as exc:  # no API key / backend down — degrade, flagged
             print(f"WARNING ce_proposal LLM fallback unavailable: {exc}")

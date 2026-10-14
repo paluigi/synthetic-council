@@ -1,12 +1,15 @@
-"""Message archive: every generator and Jev request/response is logged.
+"""Message ledger: every LLM call's full inputs and outputs are logged.
 
-One ``messages.jsonl`` per meeting (one JSON object per message: stage,
-agent, round, prompts, response, model, token usage, timestamp) plus a
-human-readable ``transcript.md`` — so runs stay inspectable and can be
-re-analysed or reused as inputs to other experiments without re-running.
+One ``messages.jsonl`` per meeting — each line a complete ``CallEvent``
+(call id, timestamp, kind, role, endpoint, model, sampling params, full
+prompts/inputs, full outputs, token usage, latency, stage/agent/round
+context) — plus a human-readable ``transcript.md``. Runs stay inspectable,
+and any call can be replayed verbatim or reused as the input of a branched
+experiment (see ``simulation/replay.py``).
 
-Attached to ``SimulationConfig.recorder`` by the runner; all simulation
-modules call ``record``/``record_jev`` when one is present.
+Attached to ``SimulationConfig.recorder`` by the runner; generators emit
+events through their ``on_event`` callback and choice/chat call sites pass
+``on_event`` — all funnel into ``record_event``.
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ import datetime as _dt
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from synthetic_council.inference import CallEvent
 
 
 @dataclass
@@ -25,6 +30,16 @@ class Recorder:
 
     def __post_init__(self) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
+
+    def record_event(self, event: CallEvent, **context: object) -> None:
+        """Archive one complete LLM call (the ledger currency)."""
+        d = event.to_dict()
+        d["context"] = {**(context or event.context), **self.meta}
+        if "ts" not in d or not d["ts"]:
+            d["ts"] = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds")
+        self._events.append(d)
+
+    # --- legacy shape kept for readers of older archives -------------------
 
     def record(
         self,

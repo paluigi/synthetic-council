@@ -176,10 +176,75 @@ def _confusion(df: pl.DataFrame, arm: str, col: str) -> list[list[int]]:
     return m
 
 
-def build_report(df: pl.DataFrame) -> str:
+def _settings_by_arm(allow_mixed: bool = False) -> dict[str, list[dict]]:
+    """Distinct payload settings blocks per arm (drift detection)."""
+    out: dict[str, list[dict]] = {}
+    for arm in ARMS:
+        blocks: list[dict] = []
+        for p in _payloads(arm).values():
+            s = p.get("settings")
+            if s is None:
+                s = {"(legacy payload)": "no settings block (pre inference.toml run)"}
+            if s not in blocks:
+                blocks.append(s)
+        out[arm] = blocks
+        if len(blocks) > 1 and not allow_mixed:
+            raise SystemExit(
+                f"SETTINGS DRIFT in arm '{arm}': {len(blocks)} distinct settings blocks "
+                "across payloads — outcome comparisons across mixed settings are "
+                "misleading. Re-run the arm under one inference.toml, or pass "
+                "--allow-mixed to proceed anyway."
+            )
+    return out
+
+
+def _settings_lines(arm: str, settings: dict) -> list[str]:
+    inf = settings.get("inference", {})
+    roles = inf.get("roles", {})
+    gen, ext = roles.get("generator", {}), roles.get("extractor", {})
+    lines = [f"- {arm}:"]
+    lines.append(
+        f"  generator: {gen.get('endpoint')}/{gen.get('model')} "
+        f"(temp {gen.get('temperature', '—')})"
+    )
+    lines.append(
+        f"  extractor: {ext.get('endpoint')}/{ext.get('model')} "
+        f"(temp {ext.get('temperature', '—')})"
+    )
+    if inf.get("config_sha256"):
+        lines.append(f"  inference.toml sha256: {inf['config_sha256'][:16]}")
+    if settings.get("git_sha"):
+        lines.append(f"  git: {settings['git_sha']}")
+    return lines
+
+
+def diff_settings(a: dict, b: dict, prefix: str = "") -> list[str]:
+    """Human-readable leaf-level deltas between two settings blocks."""
+    out: list[str] = []
+    keys = sorted(set(a) | set(b))
+    for k in keys:
+        va, vb = a.get(k), b.get(k)
+        if isinstance(va, dict) and isinstance(vb, dict):
+            out.extend(diff_settings(va, vb, f"{prefix}{k}."))
+        elif va != vb:
+            out.append(f"{prefix}{k}: {va!r} -> {vb!r}")
+    return out
+
+
+def build_report(df: pl.DataFrame, settings_by_arm: dict[str, list[dict]] | None = None) -> str:
     lines = ["# Two-arm experiment comparison", ""]
     lines.append(f"Meetings: {df['meeting_date'].n_unique()} | arms: {ARMS}")
     lines.append("")
+
+    # run settings (models, sampling parameters, config hash)
+    settings_by_arm = settings_by_arm if settings_by_arm is not None else {}
+    if any(settings_by_arm.get(a) for a in ARMS):
+        lines.append("## Run settings")
+        lines.append("")
+        for arm in ARMS:
+            for s in settings_by_arm.get(arm, []):
+                lines.extend(_settings_lines(arm, s))
+        lines.append("")
 
     # (a) alignment delta, paired by meeting
     ea = {
@@ -256,16 +321,37 @@ def build_report(df: pl.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--allow-mixed", action="store_true", help="skip the settings-drift guard")
+    p.add_argument(
+        "--diff-runs",
+        nargs=2,
+        metavar=("PAYLOAD_A", "PAYLOAD_B"),
+        help="print the settings deltas between two payload.json files "
+        "(e.g. an original and a replay variant)",
+    )
+    args = p.parse_args(argv)
+
+    if args.diff_runs:
+        a = json.loads(Path(args.diff_runs[0]).read_text(encoding="utf-8")).get("settings", {})
+        b = json.loads(Path(args.diff_runs[1]).read_text(encoding="utf-8")).get("settings", {})
+        deltas = diff_settings(a, b) or ["(no differences)"]
+        print("\n".join(deltas))
+        return
+
     df = per_meeting_frame()
     if not df.height:
         raise SystemExit(
             "no simulation payloads found under "
             f"{SIM_ROOT}/{{{','.join(ARMS)}}} — run both arms first"
         )
+    settings_by_arm = _settings_by_arm(allow_mixed=args.allow_mixed)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_DIR / "per_meeting.parquet")
-    report = build_report(df)
+    report = build_report(df, settings_by_arm)
     (OUT_DIR / "report.md").write_text(report, encoding="utf-8")
     print(report)
     print(f"\nwritten: {OUT_DIR}/per_meeting.parquet, {OUT_DIR}/report.md")

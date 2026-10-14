@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 """Live smoke test: 3-agent mini-council on one synthetic memo.
 
-Verifies the full restructured pipeline against the real gateway: CE proposal
-anchor -> round-1 reactions -> round-2 responses -> CE reply -> final
-statements -> Jev extraction -> President's decision -> alignment (sim+real)
--> simulated decision mode -> message archive. Not part of the test suite
-(needs AI_GATEWAY_API_KEY); run manually:
+Verifies the full restructured pipeline against the configured endpoints
+(inference.toml): CE proposal anchor -> round-1 reactions -> round-2
+responses -> CE reply -> final statements -> position extraction ->
+President's decision -> alignment (sim+real) -> simulated decision mode
+-> call ledger + settings block. Not part of the test suite (needs the
+endpoint API keys in .env.local); run manually:
 
     uv run python scripts/simulation_smoke_live.py
 """
@@ -13,6 +14,7 @@ statements -> Jev extraction -> President's decision -> alignment (sim+real)
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -134,13 +136,17 @@ def load_env_local() -> None:
 
 async def main() -> int:
     load_env_local()
-    if not os.environ.get("AI_GATEWAY_API_KEY"):
-        print("AI_GATEWAY_API_KEY not set", file=sys.stderr)
-        return 2
-
     tmp = Path("/tmp/sim_smoke")
     cfg = make_inputs(tmp)
+    missing = cfg.inference.check_keys()
+    if missing:
+        print(f"missing API keys (put them in .env.local): {', '.join(missing)}", file=sys.stderr)
+        return 2
+    print(f"generator: {cfg.inference.role('generator').model_id}")
+    print(f"extractor: {cfg.inference.role('extractor').model_id}")
     payload = await run_meeting("2022-07-21", cfg)
+
+    print(f"settings block: {json.dumps(payload['settings'], default=str)[:400]}")
 
     print(f"CE proposal anchor: {payload['ce_proposal']['text'][:120]}...")
     for a in payload["agents"]:

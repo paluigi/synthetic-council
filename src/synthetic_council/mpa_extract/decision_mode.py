@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import polars as pl
 
 from synthetic_council.config import PROCESSED_DIR, RAW_DIR
-from synthetic_council.jev import DEFAULT_JEV_MODEL, jev_choice
+from synthetic_council.inference import Client, choice, load_config
 from synthetic_council.mpa_extract.llm import chat
 
 ACCOUNTS_DIR = RAW_DIR / "accounts"
@@ -148,7 +148,7 @@ def build_evidence(meeting_date: str, markdown: str, use_llm: bool = True) -> tu
     quotes: list[str] = []
     method = "keyword_fallback"
     if use_llm:
-        answer = chat(EVIDENCE_SYSTEM, sec[:60_000])
+        answer = chat(EVIDENCE_SYSTEM, sec[:60_000], context="decision_mode")
         quotes = _parse_quotes(answer)
         if quotes:
             method = "llm"
@@ -157,7 +157,12 @@ def build_evidence(meeting_date: str, markdown: str, use_llm: bool = True) -> tu
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     out_file.write_text(
         json.dumps(
-            {"meeting_date": meeting_date, "method": method, "quotes": quotes},
+            {
+                "meeting_date": meeting_date,
+                "method": method,
+                "quotes": quotes,
+                "curation_model": load_config().role("generator").model_id,
+            },
             indent=1,
             ensure_ascii=False,
         ),
@@ -170,17 +175,24 @@ async def classify(
     meeting_date: str,
     quotes: list[str],
     method: str,
-    model: str = DEFAULT_JEV_MODEL,
+    model: str | None = None,
 ) -> DecisionMode:
-    res = await jev_choice(
-        state={
-            "meeting_date": meeting_date,
-            "evidence": "\n\n".join(f"[{i + 1}] {q}" for i, q in enumerate(quotes)),
-        },
-        criteria=DECISION_MODE_CRITERIA,
-        instructions=DECISION_MODE_INSTRUCTIONS,
-        model=model,
-    )
+    config = load_config()
+    model = model or config.role("extractor").model_id
+    client = Client(config)
+    try:
+        res = await choice(
+            client,
+            "extractor",
+            state={
+                "meeting_date": meeting_date,
+                "evidence": "\n\n".join(f"[{i + 1}] {q}" for i, q in enumerate(quotes)),
+            },
+            criteria=DECISION_MODE_CRITERIA,
+            instructions=DECISION_MODE_INSTRUCTIONS,
+        )
+    finally:
+        await client.aclose()
     return DecisionMode(
         meeting_date=meeting_date,
         label=res.outcome,
@@ -198,7 +210,7 @@ async def classify(
 def run(
     meetings: list[str] | None = None,
     use_llm: bool = True,
-    model: str = DEFAULT_JEV_MODEL,
+    model: str | None = None,
 ) -> int:
     """Full pipeline over all accounts (or selected meetings)."""
     import asyncio

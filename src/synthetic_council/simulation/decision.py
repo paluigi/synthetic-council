@@ -113,17 +113,9 @@ async def run_decision(
         transcript=discussion.transcript(cfg.max_transcript_chars)[-12_000:],
         positions=positions[:12_000],
     )
-    text = await generator.generate(system, "Close the meeting now.")
-    if cfg.recorder is not None:
-        cfg.recorder.record(
-            stage="decision",
-            system=system,
-            user="Close the meeting now.",
-            response=text,
-            model=getattr(generator, "model_id", cfg.generator_model),
-            agent=president.person,
-            round_no=None,
-        )
+    text = await generator.generate(
+        system, "Close the meeting now.", context={"stage": "decision", "agent": president.person}
+    )
     stance = _stance_of(text)
     return Decision(
         president=president.person,

@@ -121,18 +121,11 @@ async def _recorded_generate(
     agent: str | None,
     round_no: int | None,
 ) -> str:
-    text = await gen.generate(system, user)
-    if cfg.recorder is not None:
-        cfg.recorder.record(
-            stage=stage,
-            system=system,
-            user=user,
-            response=text,
-            model=getattr(gen, "model_id", cfg.generator_model),
-            agent=agent,
-            round_no=round_no,
-        )
-    return text
+    # the generator emits its own full CallEvent (prompts, response, model,
+    # params, usage, latency) through on_event -> Recorder.record_event
+    return await gen.generate(
+        system, user, context={"stage": stage, "agent": agent, "round": round_no}
+    )
 
 
 async def run_discussion(

@@ -1,6 +1,7 @@
 """Post-discussion alignment of each member with the decision (point 3).
 
-One parallel Jev request per member and per reference decision:
+One parallel choice call per member and per reference decision (the
+``extractor`` role from inference.toml):
 
 - ``sim``  — the decision the *simulated* council took (the President's
   decision statement): internal cohesion, feeding the unanimity/consensus/
@@ -17,7 +18,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from synthetic_council.jev import jev_choice
+from synthetic_council.inference import Client, choice
 from synthetic_council.simulation.agent import Agent
 from synthetic_council.simulation.config import SimulationConfig
 from synthetic_council.simulation.decision import Decision
@@ -94,9 +95,17 @@ async def _align_one(
     reference: str,
     cfg: SimulationConfig,
     sem: asyncio.Semaphore,
+    client: Client,
 ) -> dict[str, float]:
+    def on_event(event) -> None:
+        if cfg.recorder is not None:
+            event.context = {"stage": f"alignment-{reference}", "agent": agent.person}
+            cfg.recorder.record_event(event)
+
     async with sem:
-        res = await jev_choice(
+        res = await choice(
+            client,
+            "extractor",
             state={
                 "proposal": proposal,
                 "reference_decision": decision_text,
@@ -105,17 +114,7 @@ async def _align_one(
             },
             criteria=ALIGNMENT_CRITERIA,
             instructions=_INSTRUCTIONS,
-            model=cfg.extractor_model,
-        )
-    if cfg.recorder is not None:
-        cfg.recorder.record_jev(
-            stage=f"alignment-{reference}",
-            state={"member": agent.person, "reference_decision": decision_text},
-            criteria=ALIGNMENT_CRITERIA,
-            outcome=res.outcome,
-            probabilities=res.probabilities,
-            model=cfg.extractor_model,
-            agent=agent.person,
+            on_event=on_event,
         )
     return res.probabilities
 
@@ -131,10 +130,18 @@ async def run_alignment(
     real_text = real_decision_text(meeting_date, cfg)
     sim_text = decision.statement
     sem = asyncio.Semaphore(cfg.max_concurrent_extractions)
-    sim_probs, real_probs = await asyncio.gather(
-        asyncio.gather(*[_align_one(a, proposal, sim_text, "sim", cfg, sem) for a in agents]),
-        asyncio.gather(*[_align_one(a, proposal, real_text, "real", cfg, sem) for a in agents]),
-    )
+    client = Client(cfg.inference)
+    try:
+        sim_probs, real_probs = await asyncio.gather(
+            asyncio.gather(
+                *[_align_one(a, proposal, sim_text, "sim", cfg, sem, client) for a in agents]
+            ),
+            asyncio.gather(
+                *[_align_one(a, proposal, real_text, "real", cfg, sem, client) for a in agents]
+            ),
+        )
+    finally:
+        await client.aclose()
     return [
         AlignmentResult(person=a.person, p_aligned_sim=sp, p_aligned_real=rp)
         for a, sp, rp in zip(agents, sim_probs, real_probs, strict=True)

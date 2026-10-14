@@ -1,24 +1,29 @@
-"""Position extraction via Jev (TypeSafe) on the Vercel AI Gateway.
+"""Position extraction via the ``extractor`` role (config-driven).
 
-One parallel ``experimental_evaluate`` request per extraction returns, in a
-single call:
+One measurement per extraction asks the judge (Clef via OpenRouter's
+native decisions API by default — see inference.toml) two typed questions
+in a single request:
 
-- ``position``  — ChoiceQuestion over {raise, hold, lower} with the **full
-  probability distribution** over the three options;
-- ``conviction`` — ScoreQuestion on a 3-level commitment rubric, returned as a
-  fractional probability-weighted score (0 = tentative, 2 = fully committed).
+- ``position``  — choice over {raise, hold, lower}: the member's policy
+  stance with the **full probability distribution**;
+- ``conviction`` — score over a 3-level commitment rubric, returned as a
+  fractional probability-weighted score (0 = tentative, 2 = committed).
 
-Note on TypeSafe's native confidence statistic: empirically it saturates at 1.0
-for choice questions even on deliberately hedged statements, so it is recorded
-for provenance but the conviction score is the usable confidence measure.
+Roles without a native decisions API (``api = "chat"``) emulate the same
+measurement with the choice-v1 prompted-JSON protocol — the answers share
+one shape either way. Per-answer confidence from the native API is kept
+in ``raw`` for provenance; the conviction score remains the usable
+confidence measure.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from synthetic_council.inference import Client, decision
 from synthetic_council.simulation.config import SimulationConfig
 
 POSITION_CRITERIA = {
@@ -35,18 +40,32 @@ CONVICTION_RUBRIC = [
 
 EXTRACTION_INSTRUCTIONS = (
     "You are analysing a statement by a member of the ECB Governing Council, "
-    "given their briefing memo. Answer two questions about `statement`."
+    "given their briefing memo. Judge the `statement` inside `state`."
 )
+
+QUESTIONS = {
+    "position": {
+        "type": "choice",
+        "instructions": EXTRACTION_INSTRUCTIONS + " What policy stance does the speaker take?",
+        "criteria": POSITION_CRITERIA,
+    },
+    "conviction": {
+        "type": "score",
+        "instructions": (
+            EXTRACTION_INSTRUCTIONS + " How strongly does the speaker commit to their stance?"
+        ),
+        "criteria": CONVICTION_RUBRIC,
+    },
+}
 
 
 @dataclass
 class PositionExtraction:
-    """Result of one Jev extraction (pre- or post-discussion)."""
+    """Result of one extraction (pre- or post-discussion)."""
 
     position: str
     probabilities: dict[str, float] = field(default_factory=dict)
     conviction: float | None = None  # fractional score, 0..2
-    typesafe_confidence: dict[str, Any] = field(default_factory=dict)
     input_tokens: int | None = None
     output_tokens: int | None = None
     raw: dict[str, Any] = field(default_factory=dict)
@@ -60,79 +79,70 @@ class PositionExtraction:
         return sorted_p[0] - sorted_p[1] if len(sorted_p) > 1 else sorted_p[0]
 
 
-def _parse_usage(item: Any) -> tuple[int | None, int | None]:
-    usage = getattr(item, "usage", None)
-    if usage is None:
-        return None, None
-    return getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None)
-
-
 async def extract_position(
     statement: str,
     memo: str,
     cfg: SimulationConfig,
+    client: Client | None = None,
 ) -> PositionExtraction:
-    """One Jev call: position choice + conviction score (parallel questions)."""
-    from ai import get_model
-    from ai.ops import ChoiceQuestion, ScoreQuestion, experimental_evaluate
-
-    item = None
-    last_exc: Exception | None = None
-    for attempt in range(3):
-        try:
-            item = await experimental_evaluate(
-                get_model(cfg.extractor_model),
-                state={"memo": memo, "statement": statement},
-                questions={
-                    "position": ChoiceQuestion(
-                        instructions=EXTRACTION_INSTRUCTIONS
-                        + " Q1: what policy stance does the speaker take?",
-                        criteria=POSITION_CRITERIA,
-                    ),
-                    "conviction": ScoreQuestion(
-                        instructions=EXTRACTION_INSTRUCTIONS
-                        + " Q2: how strongly does the speaker commit to their "
-                        "stated stance?",
-                        criteria=CONVICTION_RUBRIC,
-                    ),
+    """One extractor measurement: position distribution + conviction score."""
+    own = client is None
+    client = client or Client(cfg.inference)
+    role = cfg.inference.role("extractor")
+    state = {"memo": memo, "statement": statement}
+    on_event = cfg.recorder.record_event if cfg.recorder is not None else None
+    try:
+        attempts = int(role.params.get("retries", 3))
+        last_bad = ""
+        for attempt in range(attempts):
+            try:
+                answers, usage = await decision(
+                    client,
+                    "extractor",
+                    state,
+                    QUESTIONS,
+                    context={"stage": "position-extraction"},
+                    on_event=on_event,
+                )
+            except RuntimeError as exc:
+                last_bad = str(exc)
+                await asyncio.sleep(2 ** min(attempt, 4))
+                continue
+            pos_answer = answers.get("position") or {}
+            con_answer = answers.get("conviction") or {}
+            probs = {k: float(v) for k, v in (pos_answer.get("probabilities") or {}).items()}
+            if not probs or set(probs) != set(POSITION_CRITERIA):
+                last_bad = json.dumps(answers)[:200]
+                continue
+            position = pos_answer.get("choice") or max(probs, key=probs.get)  # type: ignore[arg-type]
+            conviction = float(con_answer["score"]) if con_answer.get("score") is not None else None
+            return PositionExtraction(
+                position=position,
+                probabilities=probs,
+                conviction=conviction,
+                input_tokens=usage.get("input_tokens"),
+                output_tokens=usage.get("output_tokens"),
+                raw={
+                    "endpoint": role.endpoint,
+                    "model": role.model,
+                    "api": role.api,
+                    "answers": answers,
                 },
             )
-            break
-        except Exception as exc:  # transient gateway errors
-            last_exc = exc
-            if attempt == 2:
-                raise
-            await asyncio.sleep(2**attempt * 2)
-    assert item is not None, f"extraction failed: {last_exc}"
-
-    answers = item.value.answers
-    ts_meta = (item.provider_metadata or {}).get("typesafe") or {}
-    input_tokens, output_tokens = _parse_usage(item)
-    statement_tail = statement[-600:]
-
-    if cfg.recorder is not None:
-        cfg.recorder.record_jev(
-            stage="position-extraction",
-            state={"statement_tail": statement_tail},
-            criteria=POSITION_CRITERIA,
-            outcome=answers["position"].choice,
-            probabilities=dict(answers["position"].probabilities or {}),
-            model=cfg.extractor_model,
+        raise RuntimeError(
+            f"position extraction via {role.model_id} returned no valid "
+            f"answers after {attempts} attempts; last: {last_bad!r}"
         )
-    return PositionExtraction(
-        position=answers["position"].choice,
-        probabilities=dict(answers["position"].probabilities or {}),
-        conviction=answers["conviction"].score,
-        typesafe_confidence=dict(ts_meta.get("confidence", {})),
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        raw=item.model_dump(mode="json"),
-    )
+    finally:
+        if own:
+            await client.aclose()
 
 
-async def _bounded(stmt: str, memo: str, cfg: SimulationConfig, sem: asyncio.Semaphore):
+async def _bounded(
+    stmt: str, memo: str, cfg: SimulationConfig, sem: asyncio.Semaphore, client: Client
+):
     async with sem:
-        return await extract_position(stmt, memo, cfg)
+        return await extract_position(stmt, memo, cfg, client)
 
 
 async def extract_positions(
@@ -142,5 +152,9 @@ async def extract_positions(
 ) -> list[PositionExtraction]:
     """Extract positions for many (statement, memo) pairs, bounded concurrency."""
     sem = asyncio.Semaphore(max_concurrent or cfg.max_concurrent_extractions)
-    tasks = [_bounded(stmt, memo, cfg, sem) for stmt, memo in pairs]
-    return list(await asyncio.gather(*tasks))
+    client = Client(cfg.inference)
+    try:
+        tasks = [_bounded(stmt, memo, cfg, sem, client) for stmt, memo in pairs]
+        return list(await asyncio.gather(*tasks))
+    finally:
+        await client.aclose()

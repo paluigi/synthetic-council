@@ -87,11 +87,25 @@
   press-framed memo-section prompt (`ss-press-v1`). Full run: 90 articles
   by 29 members (2024→2026-07), join 1,304 → 1,374 (+70 press links; LU
   covered for the first time). Remaining user step: rebuild
-  speech_sections + memos with `AI_GATEWAY_API_KEY` so press sections
+  speech_sections + memos with the generator key so press sections
   enter the experiment.
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
   unreachable: CY/MT; stale-sitemap: ES)
+- [x] Provider-agnostic inference (`inference.toml` + `inference.py`):
+  Vercel gateway + Jev removed (`ai[vercel]` dependency dropped); the
+  extractor role is `cloudflare/clef` on OpenRouter's native
+  `/api/alpha/decisions` API (full distributions + score rubrics in one
+  request; live-validated), the generator role is
+  `zai-org/GLM-5.3-Flash` on Featherless; any chat model can emulate the
+  measurement via the `choice-v1` protocol. Every LLM call archived as a
+  full CallEvent (inputs, outputs, model, params, usage, latency) —
+  per-meeting `messages.jsonl` ledger + per-context JSONL sinks for
+  utility calls; payload `settings` block (roles, params, prompt
+  versions, config hash, git sha) with compare_arms drift detection and
+  `--diff-runs`; `simulation/replay.py` branches a saved payload under a
+  different judge with zero generator calls. Pending: FEATHERLESS_API_KEY
+  for the live generator validation + a full re-run of both arms.
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
 - [ ] CI on push (pytest + ruff)
