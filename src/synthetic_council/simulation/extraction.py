@@ -108,7 +108,17 @@ async def extract_position(
     answers = item.value.answers
     ts_meta = (item.provider_metadata or {}).get("typesafe") or {}
     input_tokens, output_tokens = _parse_usage(item)
+    statement_tail = statement[-600:]
 
+    if cfg.recorder is not None:
+        cfg.recorder.record_jev(
+            stage="position-extraction",
+            state={"statement_tail": statement_tail},
+            criteria=POSITION_CRITERIA,
+            outcome=answers["position"].choice,
+            probabilities=dict(answers["position"].probabilities or {}),
+            model=cfg.extractor_model,
+        )
     return PositionExtraction(
         position=answers["position"].choice,
         probabilities=dict(answers["position"].probabilities or {}),

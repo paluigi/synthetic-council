@@ -67,6 +67,17 @@ ITEMS: dict[str, tuple[str, str, str]] = {
     "ETS": ("EU carbon allowance (ETS)", "EUR/t", "External & assumptions"),
     "LTN": ("Long-term interest rate (10y)", "%", "External & assumptions"),
     "STN": ("Short-term interest rate (3m)", "%", "External & assumptions"),
+    # codes present in the bulk extract since the 2026 vintage (official
+    # CL_PD_ITEM labels, added 2026-09 after the catalogue-vs-data test failed)
+    "FSTN": ("Fiscal stance (adjusted for NGEU and CICE)", "pp", "Public finance"),
+    "PCD": ("Household consumption deflator", "% growth", "Prices and costs"),
+    "CER": ("Real compensation per employee", "% growth", "Prices and costs"),
+    "FOOD": ("Food price (DG-AGRI total food)", "% growth", "External & assumptions"),
+    "YER_M": (
+        "Real GDP with modified domestic demand for Ireland",
+        "% growth",
+        "Economic activity",
+    ),
 }
 
 # NOTE: EXR, GCD, GID, GIR, LAN, LAX, LEN, LFN, LNNM, LSN, OIL, YEG exist in

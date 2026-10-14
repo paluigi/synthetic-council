@@ -26,7 +26,8 @@
    latest-vintage country GDP masked by the t+45 release calendar
    (approximation)?
 4. **Target variable**: direction (hold/hike/cut) or magnitude (bp)?
-5. **Voting rights**: model the rotation explicitly (needs accounts asterisks,
-   2015+) or treat all attendees as voters?
+5. ~~**Voting rights**~~ — **resolved**: modelled explicitly from the accounts
+   asterisks (2015+; `mpa_extract/participants.py`); used for the modal-voter
+   decision cross-check and recorded per agent.
 6. **Hawkishness priors**: LLM classification of member speeches
    (Hansen–Kazinnik style) as agent priors — v1 or later?

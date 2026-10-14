@@ -34,12 +34,54 @@
 
 ## Next (proposed)
 - [ ] Join PEEI country unemployment/IP vintages into the panel
-- [ ] Voting rights: accounts asterisks → per-meeting voting table (2015+)
-- [ ] Accounts-based attendance cross-check (2015+)
+- [x] Voting rights: accounts asterisks → per-meeting voting table (2015+) —
+  `mpa_extract/participants.py`; asterisk = NO voting right (Art 10.2
+  rotation), verified 2015-01-22 (4 no-vote) and 2024-12-12 (5 no-vote, 21
+  voters)
+- [x] Accounts-based attendance cross-check (2015+) — same module; 59/2,366
+  rows flagged `in_memberships=false` (alternates, Wayback gaps, pre-accession
+  observers)
+- [x] Monetary policy accounts pipeline (2015 →): 96 accounts as markdown,
+  participants, CE proposals (deterministic-first + LLM fallback), decision
+  mode (Jev over LLM-curated verbatim evidence; Bruegel/Trichet categories)
+- [x] Simulation engine, restructured CE-anchored (`feat/mpa-accounts-and-simulation`):
+  verbatim CE proposal → 2 rounds by the others → CE reply → final positions →
+  President's decision + modal-voter cross-check → per-member alignment vs
+  simulated AND real decisions (Jev) → simulated decision mode (Jev +
+  deterministic). Message archive per meeting (messages.jsonl, transcript.md).
+  Two experiment arms (ea_only / country memos) + compare_arms analysis.
+- [x] Member profiles: Tavily per-trait (stable traits only) + Wikipedia +
+  verified facts, one reviewable .md per member (scripts/build_profiles.py)
+- [x] Strict-window speech stance sections (speech after previous GC only;
+  section omitted when none qualifies)
+- [x] NCB governor speeches: harvested directly from NCB websites
+  (bundesbank, banque-de-france, bde, suomenpankki, nbs, eestipank) + ECB
+  blog via foedb + Banca d'Italia governor speeches (HTML entry pages
+  2025→, PDFs 2015–24) — `collectors/ncb_websites.py`
+- [x] CBS dataset (Campiglio et al. 2025) as speech source for the
+  unharvestable NCBs (JS-rendered / bot-blocked / unreachable), 2015–2023
+  only: 1,482 governor speeches by 37 members after tolerant name
+  matching (CSV deletes diacritics), (person, day) dedup vs primary
+  sources — `collectors/cbs_speeches.py`; strict-window join 647 → 1,187
+  links over 92 meetings. 2024→ for those NCBs remains open (dataset ends
+  2023-12)
+- [x] BIS hub sitemap recrawl (2024→): the redesigned hub's listing is a
+  curated ~750-speech subset and its keyword search is broken, but
+  bis.org's sitemap lists every speech page — 383 new full texts by 28
+  members incl. all gap-country governors and the new generation
+  (Knot 32, Makhlouf 47, Stournaras 26, Escrivá 12, Sleijpen 11, Radev 7,
+  Holzmann 6, Vasle 4, Šimkus 3, Wunsch 3, Vujčić 3 …) —
+  `collectors/ncb_speeches.py::collect_from_sitemap`; post-tenure purge
+  for legacy listing-walk rows (ex-governors speaking as BIS management).
+  Join 1,187 → 1,304 links. Remaining for the news layer (TinyFish, key
+  pending): PT/LU interviews and one-off gaps
+- [ ] TinyFish news layer for post-2023 gaps BIS lacks (PT, LU,
+  one-offs): search with after/before date windows + fetch, labelled as
+  press coverage rather than verbatim speech — blocked on
+  TINYFISH_API_KEY in .env.local
+  (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
+  PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
+  (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
+  unreachable: CY/MT; stale-sitemap: ES)
 - [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
-- [x] Simulation engine (`src/synthetic_council/simulation/`, branch
-  `feat/council-simulation`): memo-driven agents, Jev position+conviction
-  extraction (single parallel request, full probability distribution saved),
-  >=2-round discussion, pre/post deltas + consensus per meeting. Configurable
-  statement backend (gateway or any OpenAI-compatible API).
 - [ ] CI on push (pytest + ruff)

@@ -4,16 +4,19 @@ For every Governing Council member (person x role profile active at the meeting
 date) and every monetary policy decision meeting, produce a 1-2 page markdown memo:
 
 1. Header — member, role, country (for governors), meeting date, current rates.
-2. Euro area situation — as-of vintage macro data (HICP, GDP, unemployment, CISS,
+2. Member profile — web-evidence persona card (Tavily per-trait + Wikipedia;
+   ``scripts/build_profiles.py``), embedded when available.
+3. Euro area situation — as-of vintage macro data (HICP, GDP, unemployment, CISS,
    sentiment) + latest staff projections available at that date.
-3. Country annex (governors only) — country sentiment, and (where vintages exist)
-   country unemployment/industrial production.
-4. Last speech by the member before the meeting (title, date, excerpt) — the
-   member's most recent public positioning.
+4. Country annex (governors only, ``country_annex=True``) — country sentiment,
+   and (where vintages exist) country unemployment/industrial production.
+5. Speech stance — the member's latest speech in the strict inter-meeting
+   window (``speech_sections``), embedded only when one exists.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,6 +51,9 @@ COUNTRY_NAMES = {
     "SK": "Slovakia",
 }
 
+PROFILES_DIR = PROCESSED_DIR / "member_profiles"
+SPEECH_SECTIONS_DIR = PROCESSED_DIR / "speech_sections"
+
 MEMO_TEMPLATE = """# Briefing memo — {{ member.person }}
 
 **Role:** {{ member.role }}
@@ -55,7 +61,12 @@ MEMO_TEMPLATE = """# Briefing memo — {{ member.person }}
 {% endif %}**Meeting:** GC monetary policy meeting, {{ meeting.announcement_date }}
 **Current rates:** MRO {{ meeting.mro }}% · DFR {{ meeting.dfr }}% · MLF {{ meeting.mlf }}%
 
-## Euro area economic situation (data available at the meeting)
+{% if profile %}
+## Who you are
+
+{{ profile }}
+
+{% endif %}## Euro area economic situation (data available at the meeting)
 
 | Indicator | Reference | Value |
 |---|---|---|
@@ -86,16 +97,10 @@ all available items; annual figures).
 {% endfor %}
 {% endif %}
 
-{% if last_speech %}
+{% if speech_section %}
 ## Your most recent speech before the meeting
 
-**"{{ last_speech.title }}"** — {{ last_speech.speech_date }}
-
-{{ last_speech.excerpt }}
-{% else %}
-## Your most recent speech before the meeting
-
-No ECB-website speech on record in the 120 days before the meeting.
+{{ speech_section }}
 {% endif %}
 """
 
@@ -128,6 +133,32 @@ def _fmt(v) -> str:
         return str(v)
 
 
+def _person_slug(person: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", person.lower()).strip("-")
+    return s
+
+
+def profile_text(person: str) -> str:
+    """Compact profile card body (header line and provenance footer stripped)."""
+    path = PROFILES_DIR / f"{person}.md"
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"^# .*?\n", "", text, count=1)
+    parts = text.split("\n---\n")
+    body = parts[0]
+    # keep the roles/facts lines; drop the "**Country:**/blank scaffolding lines
+    lines = [ln for ln in body.splitlines() if ln.strip() and not ln.startswith("**")]
+    return "\n".join(lines).strip()[:2_500]
+
+
+def _speech_section(meeting_date: str, person: str) -> str:
+    path = SPEECH_SECTIONS_DIR / f"{meeting_date}_{_person_slug(person)}.md"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
+
+
 def _proj_round_available(projections: pl.DataFrame, meeting_date) -> pl.DataFrame:
     """Latest MPD projection rounds published on/before the meeting.
 
@@ -145,10 +176,17 @@ def build_memos(
     memberships: pl.DataFrame,
     macro: pl.DataFrame,
     projections: pl.DataFrame,
-    last_speech: pl.DataFrame,
     out_dir: Path,
     meetings_limit: int | None = None,
+    country_annex: bool = True,
 ) -> MemoResult:
+    """Build one memo per (meeting, member).
+
+    ``country_annex=False`` produces the euro-area-only variant (experiment
+    arm ``ea_only``): the governor's country section is omitted; everything
+    else — including the member profile and the strict-window speech stance —
+    is identical across variants.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     env = jinja2.Environment(trim_blocks=True, lstrip_blocks=True)
     tpl = env.from_string(MEMO_TEMPLATE)
@@ -240,7 +278,7 @@ def build_memos(
         ]
         for a in attendees.iter_rows(named=True):
             country_rows = []
-            if a["country"]:
+            if country_annex and a["country"]:
                 cgeo = "EL" if a["country"] == "GR" else a["country"]
                 crows = macro.filter(
                     (pl.col("announcement_date") == d) & (pl.col("geo") == cgeo)
@@ -253,20 +291,6 @@ def build_memos(
                     }
                     for r in crows.iter_rows(named=True)
                 ]
-            sp = last_speech.filter(
-                (pl.col("meeting_date") == d) & (pl.col("speaker") == pl.lit(a["person"]))
-            )
-            sp_row = sp.row(0, named=True) if sp.height else None
-            last_speech_ctx = None
-            if sp_row:
-                text = (sp_row.get("contents") or "").strip()
-                words = text.split()
-                excerpt = " ".join(words[:150]) + ("…" if len(words) > 150 else "")
-                last_speech_ctx = {
-                    "title": sp_row["title"],
-                    "speech_date": str(sp_row["speech_date"]),
-                    "excerpt": excerpt,
-                }
             md = tpl.render(
                 member=a,
                 country_name=COUNTRY_NAMES.get(a["country"] or "", ""),
@@ -276,12 +300,13 @@ def build_memos(
                     "dfr": m["dfr"] if m["dfr"] is not None else "n/a",
                     "mlf": m["mlf"] if m["mlf"] is not None else "n/a",
                 },
+                profile=profile_text(a["person"]),
                 ea_rows=ea_out,
                 projections_by_category=projections_by_category,
                 proj_years=proj_years,
                 proj_round=str(last_round) if proj_out else "",
                 country_rows=country_rows,
-                last_speech=last_speech_ctx,
+                speech_section=_speech_section(str(d), a["person"]),
             )
             fname = f"{d}_{a['person'].replace(' ', '_')}.md"
             (out_dir / fname).write_text(md, encoding="utf-8")
@@ -294,13 +319,13 @@ if __name__ == "__main__":
     memberships = pl.read_parquet("data/raw/gc_memberships_wayback.parquet")
     macro = pl.read_parquet(PROCESSED_DIR / "macro_asof_panel.parquet")
     projections = pl.read_parquet(RAW_DIR / "mpd_projections.parquet")
-    last_speech = pl.read_parquet(PROCESSED_DIR / "last_speech_before_meeting.parquet")
-    res = build_memos(
-        meetings,
-        memberships,
-        macro,
-        projections,
-        last_speech,
-        Path("data/processed/memos"),
-    )
-    print(res)
+    for annex, name in ((False, "memos_ea"), (True, "memos_ea_country")):
+        res = build_memos(
+            meetings,
+            memberships,
+            macro,
+            projections,
+            Path(f"data/processed/{name}"),
+            country_annex=annex,
+        )
+        print(res)

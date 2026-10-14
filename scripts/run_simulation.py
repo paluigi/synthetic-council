@@ -1,31 +1,38 @@
 #!/usr/bin/env python
-"""CLI: run the council simulation for meeting dates.
+"""CLI: run the council simulation for meeting dates (one experiment arm).
 
 Usage:
     # explicit dates
     uv run python scripts/run_simulation.py 2022-07-21 2022-09-08 [--rounds 2]
 
-    # every meeting that has memos (one command = full run)
-    uv run python scripts/run_simulation.py --all
+    # every meeting that has memos + a CE proposal anchor (full run)
+    uv run python scripts/run_simulation.py --all --arm ea_only
+    uv run python scripts/run_simulation.py --all --arm country
 
-    # all meetings from a year onward (e.g. the true-vintage era)
+    # all meetings from a year onward (e.g. the accounts era)
     uv run python scripts/run_simulation.py --all --from 2015
 
-Options: [--generator gateway|openai_compat] [--generator-model openai/gpt-4o-mini]
-[--out data/processed/simulations] [--resume/--no-resume]
+Options: [--arm ea_only|country] [--generator gateway|openai_compat]
+[--generator-model openai/gpt-4o-mini] [--out data/processed/simulations]
+[--resume/--no-resume]
 
-Resume: a meeting is skipped when its output JSON already exists; delete the
-file to re-run that meeting. Enabled by default for --all, off for explicit
+Arms: ``ea_only`` gives every member the euro-area-only memo
+(data/processed/memos_ea); ``country`` additionally gives national governors
+their country annex (data/processed/memos_ea_country). Outputs land under
+{out}/{arm}/{date}/ (payload.json, messages.jsonl, transcript.md).
+
+Resume: a meeting is skipped when its payload.json already exists; delete
+the directory to re-run. Enabled by default for --all, off for explicit
 dates.
 
 Requires AI_GATEWAY_API_KEY in .env.local (extractor, always Jev via the
-Vercel AI Gateway). For --generator openai_compat also set
-OPENAI_COMPAT_BASE_URL, OPENAI_COMPAT_API_KEY (optional) and
-OPENAI_COMPAT_MODEL.
+Vercel AI Gateway; also the CE-proposal/decision-mode LLM fallbacks). For
+--generator openai_compat also set OPENAI_COMPAT_BASE_URL,
+OPENAI_COMPAT_API_KEY (optional) and OPENAI_COMPAT_MODEL.
 
 Note: memos are not committed to the repository (data/ stays untracked);
 build them first with `uv run python -m synthetic_council.memo` (needs the
-collected datasets) or point --memos-dir at an existing memos/ directory.
+collected datasets) — it writes both arm variants.
 """
 
 from __future__ import annotations
@@ -49,9 +56,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("dates", nargs="*", help="meeting dates, YYYY-MM-DD")
     p.add_argument(
+        "--arm",
+        choices=["ea_only", "country"],
+        default="ea_only",
+        help="memo variant: euro-area only, or + country annex for governors",
+    )
+    p.add_argument(
         "--all",
         action="store_true",
-        help="run every meeting found in --memos-dir (cheapest first: oldest date)",
+        help="run every meeting with memos and a CE proposal anchor (oldest first)",
     )
     p.add_argument(
         "--from",
@@ -59,7 +72,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="with --all: only meetings on/after this date (YYYY-MM-DD)",
     )
-    p.add_argument("--memos-dir", type=Path, default=None)
+    p.add_argument("--memos-dir", type=Path, default=None, help="override the arm's memo dir")
     p.add_argument("--rounds", type=int, default=2)
     p.add_argument(
         "--generator",
@@ -74,18 +87,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="resume",
         action="store_true",
         default=None,
-        help="skip meetings whose output JSON already exists (default: on for --all)",
+        help="skip meetings whose payload.json already exists (default: on for --all)",
     )
     p.add_argument(
         "--no-resume",
         dest="resume",
         action="store_false",
-        help="re-run meetings even if their output JSON exists",
+        help="re-run meetings even if their payload.json exists",
     )
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="validate config + memos, then exit without any API calls",
+        help="validate config + inputs, then exit without any API calls",
     )
     return p.parse_args(argv)
 
@@ -101,13 +114,14 @@ def load_env_local() -> None:
                 os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
-def resolve_dates(
-    args: argparse.Namespace, memos_dir: Path
-) -> tuple[list[str], list[str]]:
+def resolve_dates(args: argparse.Namespace, cfg: SimulationConfig) -> tuple[list[str], list[str]]:
     """Return (dates_to_run, skipped_already_done)."""
-    from synthetic_council.simulation.runner import meeting_memos
+    import polars as pl
+
+    from synthetic_council.simulation.runner import load_ce_proposal
 
     if args.all:
+        memos_dir = cfg.resolved_memos_dir()
         dates = sorted(
             {
                 m.group("date")
@@ -115,10 +129,19 @@ def resolve_dates(
                 if (m := re.match(r"^(?P<date>\d{4}-\d{2}-\d{2})_", path.name))
             }
         )
+        props = pl.read_parquet(cfg.ce_proposal_path).with_columns(
+            pl.col("meeting_date").cast(pl.String)
+        )
+        anchored = set(
+            props.filter(pl.col("proposal_text").str.len_chars() > 0)["meeting_date"].to_list()
+        )
+        dates = [d for d in dates if d in anchored]
         if args.from_date:
             dates = [d for d in dates if d >= args.from_date]
         if not dates:
-            raise FileNotFoundError(f"no meeting memos found in {memos_dir}")
+            raise FileNotFoundError(
+                f"no anchored meetings found in {memos_dir} (need memos + CE proposals)"
+            )
     else:
         dates = args.dates
         bad = [d for d in dates if not _DATE_RE.match(d)]
@@ -133,9 +156,9 @@ def resolve_dates(
     to_run: list[str] = []
     skipped: list[str] = []
     for d in dates:
-        meeting_memos(memos_dir, d)  # validates memos exist
-        out = args.out / f"simulation_{d}.json"
-        (skipped if (resume and out.exists()) else to_run).append(d)
+        load_ce_proposal(d, cfg)  # validates the anchor exists
+        done = (args.out / args.arm / d / "payload.json").exists()
+        (skipped if (resume and done) else to_run).append(d)
     return to_run, skipped
 
 
@@ -143,12 +166,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     load_env_local()
-    if not os.environ.get("AI_GATEWAY_API_KEY"):
+    if not os.environ.get("AI_GATEWAY_API_KEY") and not args.dry_run:
         print("AI_GATEWAY_API_KEY is not set (put it in .env.local)", file=sys.stderr)
         return 2
 
     cfg = SimulationConfig(
-        memos_dir=args.memos_dir if args.memos_dir else Path("data/processed/memos"),
+        arm=args.arm,
+        memos_dir=args.memos_dir,
+        out_root=args.out,
         generator_backend=args.generator,
         generator_model=args.generator_model,
         extractor_model=args.extractor_model,
@@ -156,41 +181,45 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        to_run, skipped = resolve_dates(args, cfg.memos_dir)
+        to_run, skipped = resolve_dates(args, cfg)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
     if skipped:
         print(f"resume: {len(skipped)} meetings already done (skipped)")
-    n_memos = {d: len(list(cfg.memos_dir.glob(f"{d}_*.md"))) for d in to_run[:3]}
-    for d, n in n_memos.items():
+    print(f"arm={cfg.arm} memos={cfg.resolved_memos_dir()}")
+    for d in to_run[:3]:
+        n = len(list(cfg.resolved_memos_dir().glob(f"{d}_*.md")))
         print(f"{d}: {n} member memos found")
     if len(to_run) > 3:
         print(f"... {len(to_run) - 3} more meetings queued")
 
     if args.dry_run:
         print(
-            f"dry-run OK: {len(to_run)} meetings to run, {len(skipped)} skipped; "
-            "no API calls made"
+            f"dry-run OK: {len(to_run)} meetings to run, {len(skipped)} skipped; no API calls made"
         )
         return 0
 
     from synthetic_council.simulation.runner import run_simulation
 
-    written = asyncio.run(run_simulation(to_run, cfg, args.out))
+    written = asyncio.run(run_simulation(to_run, cfg))
     for path in written:
         payload = json.loads(path.read_text())
         cons = payload["consensus"]
+        mode = payload["mode"]
+        dec = payload["decision"]
         changed = [
-            a["person"] for a in payload["agents"] if a["deltas"]["position_changed"]
+            a["person"] for a in payload["agents"] if (a["deltas"] or {}).get("position_changed")
         ]
         print(
-            f"{payload['meeting_date']}: {payload['n_agents']} agents, "
-            f"{payload['n_rounds']} rounds; balance {cons['before']} -> "
-            f"{cons['after']}; position changes: {changed or 'none'}"
+            f"{payload['meeting_date']} [{payload['arm']}]: {payload['n_agents']} agents; "
+            f"stance {cons['majority_before']} -> {cons['majority_after']}; "
+            f"decision={dec['stance']} (voters' mode: {dec['modal_stance_voters']}); "
+            f"mode={mode['jev_label']}/{mode['deterministic_label']}; "
+            f"position changes: {changed or 'none'}"
         )
-        print(f"  -> {path}")
+        print(f"  -> {path.parent}")
     return 0
 
 

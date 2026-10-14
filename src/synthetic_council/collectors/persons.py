@@ -43,6 +43,9 @@ CANONICAL = {
     "Bogusław Grabowski": ["Boguslaw Grabowski", "Bogusław Grabowski"],
     "Sławomir Skrzypek": ["Slawomir Skrzypek", "Sławomir Skrzypek"],
     "Marek Belka": ["Marek Belka"],
+    # Wayback snapshot typo: accent on the wrong syllable created a second
+    # person entry with a 6-week tenure
+    "Pablo Hernández de Cos": ["Pablo Hernandéz de Cos"],
     "Zeti Aziz": [],
     "Ilmar Rimsevics": ["Ilmārs Rimšēvičs", "Ilmars Rimsevics"],
     "Rein Minka": [],
