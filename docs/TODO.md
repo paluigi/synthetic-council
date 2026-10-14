@@ -79,6 +79,16 @@
   one-offs): search with after/before date windows + fetch, labelled as
   press coverage rather than verbatim speech — blocked on
   TINYFISH_API_KEY in .env.local
+- [x] TinyFish press layer built, live-validated and fully run
+  (`collectors/press_speeches.py` + `docs/data-sources/press-tinyfish.md`):
+  search (news+web, date-bounded) → policy-signal gate → fetch with
+  published-date window clip → subject check (headline or body-head) →
+  `press` corpus rows that only fill gaps in the strict-window join;
+  press-framed memo-section prompt (`ss-press-v1`). Full run: 90 articles
+  by 29 members (2024→2026-07), join 1,304 → 1,374 (+70 press links; LU
+  covered for the first time). Remaining user step: rebuild
+  speech_sections + memos with `AI_GATEWAY_API_KEY` so press sections
+  enter the experiment.
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;

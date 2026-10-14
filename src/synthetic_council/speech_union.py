@@ -26,12 +26,14 @@ ECB_PATH = RAW_DIR / "speeches" / "speeches.parquet"
 BIS_PATH = RAW_DIR / "speeches" / "bis_speeches.parquet"
 NCB_WEB_PATH = RAW_DIR / "speeches" / "ncb_web_speeches.parquet"
 CBS_PATH = RAW_DIR / "speeches" / "cbs_speeches.parquet"
+PRESS_PATH = RAW_DIR / "speeches" / "press_speeches.parquet"
 
 
 def union_corpus() -> pl.DataFrame:
-    """ECB CSV + BIS hub + NCB websites + ECB blog + CBS, normalised to one
-    schema. CBS rows are pre-deduplicated against the primary sources on
-    (speaker, date) inside their own collector."""
+    """ECB CSV + BIS hub + NCB websites + ECB blog + CBS + press, normalised
+    to one schema. CBS rows are pre-deduplicated against the primary sources
+    on (speaker, date) inside their own collector; press rows only ever fill
+    windows with no real speech (see ``build``)."""
     ecb = (
         pl.read_parquet(ECB_PATH)
         .with_columns(
@@ -45,7 +47,12 @@ def union_corpus() -> pl.DataFrame:
         )
     )
     frames = [ecb.select("date", "speaker", "title", "contents", "source", "url")]
-    for path, default_source in ((BIS_PATH, "bis"), (NCB_WEB_PATH, None), (CBS_PATH, "cbs")):
+    for path, default_source in (
+        (BIS_PATH, "bis"),
+        (NCB_WEB_PATH, None),
+        (CBS_PATH, "cbs"),
+        (PRESS_PATH, "press"),
+    ):
         if not path.exists():
             continue
         other = pl.read_parquet(path)
@@ -59,7 +66,12 @@ def union_corpus() -> pl.DataFrame:
     df = pl.concat(frames, how="vertical")
     return (
         df.filter(pl.col("contents").str.len_bytes() > 200)
-        .unique(subset=["speaker", "date", "title"])
+        # a press syndication can share (speaker, date, title) with the real
+        # speech it covers — the real source must survive the dedup
+        .with_columns((pl.col("source") == "press").alias("_is_press"))
+        .sort("_is_press", "source")  # deterministic: real before press, then by source
+        .unique(subset=["speaker", "date", "title"], keep="first", maintain_order=True)
+        .drop("_is_press")
         .sort("date")
     )
 
@@ -94,6 +106,23 @@ def _roster(memberships: pl.DataFrame) -> pl.DataFrame:
     return pl.DataFrame(rows, schema={"meeting_date": pl.String, "person": pl.String})
 
 
+def _latest_with_press_fallback(win: pl.DataFrame) -> pl.DataFrame:
+    """Latest speech per speaker in the window; press never displaces a
+    real speech — it is used only for speakers with no non-press speech."""
+    real = (
+        win.filter(pl.col("source") != "press")
+        .sort("date", descending=True)
+        .unique(subset=["speaker"], keep="first", maintain_order=True)
+    )
+    press = (
+        win.filter(pl.col("source") == "press")
+        .sort("date", descending=True)
+        .unique(subset=["speaker"], keep="first", maintain_order=True)
+        .filter(~pl.col("speaker").is_in(real["speaker"].to_list()))
+    )
+    return pl.concat([real, press]) if press.height else real
+
+
 def build(corpus: pl.DataFrame | None = None) -> pl.DataFrame:
     corpus = corpus if corpus is not None else union_corpus()
     meetings = (
@@ -115,7 +144,7 @@ def build(corpus: pl.DataFrame | None = None) -> pl.DataFrame:
         )
         if not win.height:
             continue
-        latest = win.sort("date", descending=True).unique(subset=["speaker"], keep="first")
+        latest = _latest_with_press_fallback(win)
         att = roster.filter(pl.col("meeting_date") == d)
         joined = att.join(latest, left_on="person", right_on="speaker", how="inner")
         for r in joined.iter_rows(named=True):

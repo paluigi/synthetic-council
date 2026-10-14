@@ -7,6 +7,12 @@ you advocated …" — saved as markdown and reused verbatim by every memo
 rebuild. Each speech qualifies for at most one meeting, so sections are
 stable. Members with no qualifying speech simply get no section.
 
+Rows with source == 'press' (TinyFish news coverage filling harvest gaps,
+see ``collectors/press_speeches.py``) get a press-framed prompt: the
+section summarises the positions attributed to the member in quoted
+remarks plus analyst framing, and says explicitly that this is press
+coverage rather than a verbatim speech.
+
 Output:
 - data/processed/speech_sections/{meeting_date}_{person}.md
 - data/processed/speech_sections_index.parquet (+ .csv)
@@ -27,6 +33,7 @@ INDEX_PATH = SECTIONS_DIR / "speech_sections_index.parquet"
 JOIN_PATH = PROCESSED_DIR / "latest_speech_per_meeting.parquet"
 
 PROMPT_VERSION = "ss-v1"
+PRESS_PROMPT_VERSION = "ss-press-v1"
 MAX_SPEECH_CHARS = 14_000
 
 _SECTION_SYSTEM = """You write one short briefing section for a central banker's internal meeting \
@@ -38,6 +45,21 @@ in the second person ("In your most recent speech you ..."), stating what the me
 emphasised or warned about — grounded ONLY in the speech text, quoting one or two key phrases in \
 quotation marks where effective. Do not mention the Governing Council, this memo or any \
 briefing context. Plain prose, no headings, no bullet points."""
+
+_PRESS_SECTION_SYSTEM = """You write one short briefing section for a central banker's internal \
+meeting memo. You are given a news article (publisher, title, date, full text) that covers the \
+member's recent public remarks (a speech, interview or testimony) shortly before an ECB \
+Governing Council monetary policy meeting.
+
+Extract the monetary policy stance the member expressed in the remarks quoted or reported in \
+the article. Write 2-4 sentences in the second person ("In your recent public remarks you \
+..."), stating the positions attributed to you — quoting the member's own words in quotation \
+marks where the article carries them, and clearly distinguishing them from the journalist's or \
+analysts' framing. Begin by noting that this section is based on press coverage of your \
+remarks, not the full text. If the article contains no substantive monetary-policy remarks by \
+the member (e.g. it is about legal or institutional matters), say so in a single sentence and \
+do not invent a stance. Ground everything ONLY in the article. Do not mention the Governing \
+Council, this memo or any briefing context. Plain prose, no headings, no bullet points."""
 
 
 @dataclass
@@ -52,10 +74,20 @@ def _slug(person: str) -> str:
     return s
 
 
+def _system_prompt(source: str) -> str:
+    """Press rows (TinyFish news coverage) get the press-framed prompt."""
+    return _PRESS_SECTION_SYSTEM if source == "press" else _SECTION_SYSTEM
+
+
 def _section_text(speech: dict) -> str:
+    press = speech.get("source") == "press"
     body = (speech["contents"] or "")[:MAX_SPEECH_CHARS]
-    user = f"SPEECH TITLE: {speech['title']}\nDATE: {speech['speech_date']}\n\n{body}"
-    return chat(_SECTION_SYSTEM, user, temperature=0.2).strip()
+    if press:
+        head = f"NEWS ARTICLE TITLE: {speech['title']}\nDATE: {speech['speech_date']}"
+    else:
+        head = f"SPEECH TITLE: {speech['title']}\nDATE: {speech['speech_date']}"
+    user = f"{head}\n\n{body}"
+    return chat(_system_prompt(speech.get("source", "")), user, temperature=0.2).strip()
 
 
 def build_speech_sections(
@@ -89,7 +121,9 @@ def build_speech_sections(
                 "title": r["title"],
                 "source": r["source"],
                 "file": fname,
-                "prompt_version": PROMPT_VERSION,
+                "prompt_version": (
+                    PRESS_PROMPT_VERSION if r["source"] == "press" else PROMPT_VERSION
+                ),
             }
         )
     df = pl.DataFrame(rows)

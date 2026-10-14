@@ -6,6 +6,7 @@ Usage: uv run python scripts/collect_all.py [--members-only|--skip-members]
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +106,20 @@ def main() -> None:
 
     sj = speech_union.build()
     print(f"latest-speech links={sj.height} over {sj['meeting_date'].n_unique()} meetings")
+
+    # optional press layer (TinyFish, free endpoints; needs the key exported)
+    if os.environ.get("TINYFISH_API_KEY"):
+        from synthetic_council.collectors import press_speeches
+
+        press = press_speeches.collect()
+        print(f"press rows={press.height} persons={press['speaker'].n_unique()}")
+        sj = speech_union.build()  # re-join with press filling the gaps
+        print(
+            f"latest-speech links (with press)={sj.height} "
+            f"press links={sj.filter(pl.col('source') == 'press').height}"
+        )
+    else:
+        print("TINYFISH_API_KEY not set - skipping the press layer")
 
     step("7/9 staff projections (MPD)")
     proj = projections.collect()
