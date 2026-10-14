@@ -47,6 +47,7 @@ def main() -> None:
         f"ncb-web speeches={ncb_df.height} "
         f"persons={ncb_df['speaker'].n_unique() if ncb_df.height else 0}"
     )
+    cbs_speeches.download()  # 686 MB from the authors' Dropbox, skipped when present
     cbs_df = cbs_speeches.build()
     print(
         f"cbs speeches={cbs_df.height} persons={cbs_df['speaker'].n_unique()} "
