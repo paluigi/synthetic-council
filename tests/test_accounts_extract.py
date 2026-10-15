@@ -54,7 +54,8 @@ class TestParticipants:
         by_name = {e["name"]: e for e in entries}
         no_vote = sorted(n for n, e in by_name.items() if not e["voting_right"])
         assert no_vote == ["Makhlouf", "Müller", "Nagel", "Stournaras", "Wunsch"]
-        assert by_name["Demarco"]["replacing"] == "Scicluna"
+        # mononym account spellings canonicalise to full names (persons.py)
+        assert by_name["Alexander Demarco"]["replacing"] == "Scicluna"
         assert by_name["Lane"]["voting_right"] is True
 
     def test_alternate_to_and_teleconference(self):
