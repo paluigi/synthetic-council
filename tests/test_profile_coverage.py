@@ -39,3 +39,58 @@ class TestParticipantProfileCoverage:
     def test_no_placeholder_profiles(self):
         for p in PROFILES.glob("*.md"):
             assert p.stem != "To be appointed"
+
+
+@pytest.mark.skipif(
+    not (PROCESSED_DIR / "memos_ea").exists(),
+    reason="memos not built on this machine",
+)
+class TestMemoCoverage:
+    def test_every_rate_meeting_participant_has_a_memo(self):
+        """The accounts (scraped from ecb.europa.eu/press/accounts) are the
+        source of truth for attendance: every participant of every rate
+        decision meeting must have a memo in both arms — including acting
+        governors and alternates the Wayback table missed."""
+        import polars as pl
+
+        parts = pl.read_parquet(PROCESSED_DIR / "account_participants.parquet").with_columns(
+            pl.col("meeting_date").cast(str)
+        )
+        dec = set(
+            pl.read_parquet(PROCESSED_DIR / "gc_decisions.parquet")
+            .with_columns(pl.col("announcement_date").cast(str))["announcement_date"]
+            .to_list()
+        )
+        rows = [r for r in parts.iter_rows(named=True) if r["meeting_date"] in dec]
+        assert rows, "no rate-meeting participants found"
+        for arm in ("memos_ea", "memos_ea_country"):
+            missing = [
+                (r["meeting_date"], r["person"])
+                for r in rows
+                if not (
+                    PROCESSED_DIR / arm / f"{r['meeting_date']}_{r['person'].replace(' ', '_')}.md"
+                ).exists()
+            ]
+            assert not missing, f"{arm}: participants without memos: {missing[:5]}"
+
+
+class TestKnownNonMembers:
+    def test_gap_members_carry_country(self):
+        """Members never captured by the Wayback snapshots still resolve to
+        their NCB role/country (native bank names + known-members table)."""
+        path = PROCESSED_DIR / "account_participants.parquet"
+        if not path.exists():
+            pytest.skip("participants not built")
+        import polars as pl
+
+        parts = pl.read_parquet(path)
+        for person, country in [
+            ("Margarita Delgado", "ES"),
+            ("Tuomas Välimäki", "FI"),
+            ("Māris Kālis", "LV"),
+            ("Sandra Švaljek", "HR"),
+            ("Tina Žumer", "SI"),
+        ]:
+            rows = parts.filter(pl.col("person") == person)
+            if rows.height:
+                assert rows["country"].unique().to_list() == [country], person

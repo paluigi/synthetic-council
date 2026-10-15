@@ -1,7 +1,11 @@
 """Memo builder: per-member briefing for each GC monetary policy meeting.
 
-For every Governing Council member (person x role profile active at the meeting
-date) and every monetary policy decision meeting, produce a 1-2 page markdown memo:
+For every meeting attendee — **from the monetary policy accounts**
+(``account_participants``, scraped from ecb.europa.eu/press/accounts:
+attendance, roles and voting rights as printed in each account, including
+acting governors and alternates the Wayback GC-members page missed) and,
+for pre-accounts (pre-2015) meetings, from the Wayback membership tenures —
+produce a 1-2 page markdown memo:
 
 1. Header — member, role, country (for governors), meeting date, current rates.
 2. Member profile — web-evidence persona card (Tavily per-trait + Wikipedia;
@@ -192,6 +196,25 @@ def build_memos(
     env = jinja2.Environment(trim_blocks=True, lstrip_blocks=True)
     tpl = env.from_string(MEMO_TEMPLATE)
 
+    # SOURCE OF TRUTH for attendance (2015+): the monetary policy accounts
+    # (mpa_extract/participants.py, scraped from ecb.europa.eu/press/accounts)
+    # — attendance, roles, countries and voting rights as printed in each
+    # account, including acting governors and alternates the Wayback GC
+    # members page missed (e.g. Margarita Delgado, ES 2024-07-18, who held
+    # a voting right). The Wayback memberships remain the fallback for
+    # pre-accounts meetings only.
+    parts_path = PROCESSED_DIR / "account_participants.parquet"
+    parts_by_date: dict[str, list[dict]] = {}
+    if parts_path.exists():
+        parts = (
+            pl.read_parquet(parts_path)
+            .with_columns(pl.col("meeting_date").cast(str))
+            .select("meeting_date", "person", "role", "country")
+            .sort("meeting_date", "person")
+        )
+        for r in parts.iter_rows(named=True):
+            parts_by_date.setdefault(r["meeting_date"], []).append(r)
+
     meets = meetings.sort("announcement_date")
     if meetings_limit:
         meets = meets.tail(meetings_limit)
@@ -199,24 +222,34 @@ def build_memos(
     n = 0
     for m in meets.iter_rows(named=True):
         d = m["announcement_date"]
-        # active tenures, with a +45d grace past 'end' (Wayback sighting gaps).
-        # A person can qualify twice near handovers (old role in grace, new role
-        # started) — keep ONE memo per person: the tenure already started at d,
-        # else the latest one.
-        attendees = (
-            memberships.filter(
-                (pl.col("start").str.to_date() <= d)
-                & (pl.col("end").str.to_date() + pl.duration(days=45) >= d)
+        # drop this date's previous memos first: the roster may have changed
+        # between builds (e.g. the accounts-vs-memberships switch) and stale
+        # (date, member) files would otherwise linger in the output
+        for old in out_dir.glob(f"{d}_*.md"):
+            old.unlink()
+        if str(d) in parts_by_date:  # accounts era: attendance as recorded
+            attendees = parts_by_date[str(d)]
+        else:
+            # pre-accounts fallback: active tenures, with a +45d grace past
+            # 'end' (Wayback sighting gaps). A person can qualify twice near
+            # handovers (old role in grace, new role started) — keep ONE memo
+            # per person: the tenure already started at d, else the latest one.
+            attendees = (
+                memberships.filter(
+                    (pl.col("start").str.to_date() <= d)
+                    & (pl.col("end").str.to_date() + pl.duration(days=45) >= d)
+                )
+                .with_columns(
+                    (
+                        (pl.col("end").str.to_date() >= d).alias("_active")
+                        & (pl.col("start").str.to_date() <= d)
+                    ).alias("_started")
+                )
+                .sort(["person", "_started", "start"], descending=[False, True, True])
+                .unique(subset=["person"], keep="first")
+                .select("person", "role", "country")
+                .to_dicts()
             )
-            .with_columns(
-                (
-                    (pl.col("end").str.to_date() >= d).alias("_active")
-                    & (pl.col("start").str.to_date() <= d)
-                ).alias("_started")
-            )
-            .sort(["person", "_started", "start"], descending=[False, True, True])
-            .unique(subset=["person"], keep="first")
-        )
         ea_rows = macro.filter((pl.col("announcement_date") == d) & (pl.col("geo") == "EA")).sort(
             "indicator"
         )
@@ -277,7 +310,7 @@ def build_memos(
             for cat in mpd_items.CATEGORY_ORDER
             if any(p["category"] == cat for p in proj_out)
         ]
-        for a in attendees.iter_rows(named=True):
+        for a in attendees:
             country_rows = []
             if country_annex and a["country"]:
                 cgeo = "EL" if a["country"] == "GR" else a["country"]

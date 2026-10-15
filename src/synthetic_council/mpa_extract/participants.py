@@ -52,6 +52,27 @@ _ATTENDANCE_RE = re.compile(
 )
 
 _BANK_TO_COUNTRY = {bank.lower(): c for c, bank in CENTRAL_BANK_BY_COUNTRY.items()}
+# the accounts print NCBs under their native names; official English names
+# (the map above) never match them
+_BANK_TO_COUNTRY.update(
+    {
+        "latvijas banka": "LV",
+        "hrvatska narodna banka": "HR",
+        "eesti pank": "EE",
+        "suomen pankki": "FI",
+        "bancaditalia": "IT",
+        "banca d'italia": "IT",
+    }
+)
+
+# Council members who sat (some with voting rights) but were never captured
+# by the Wayback GC-members snapshots, so neither the tenure lookup nor the
+# account line itself carries their role/country — verified against the
+# accounts and the NCBs' own records
+_KNOWN_NON_MEMBERS = {
+    "Margarita Delgado": ("Acting Governor, Banco de España", "ES"),  # 2024-07-18, voted
+    "Tuomas Välimäki": ("Member of the Board, Bank of Finland", "FI"),  # 2023-07 → 2024-01
+}
 
 
 @dataclass
@@ -232,6 +253,8 @@ def extract(meetings: list[str] | None = None) -> ParticipantsResult:
             full, role, country, in_db = _role_country(memberships, e["name"], meeting_date)
             if not in_db and e["deputy_role"]:
                 role, country = e["deputy_role"], e["country_from_bank"]
+            if not in_db and country is None and full in _KNOWN_NON_MEMBERS:
+                role, country = _KNOWN_NON_MEMBERS[full]
             rows.append(
                 Participant(
                     meeting_date=meeting_date,
