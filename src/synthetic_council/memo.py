@@ -117,6 +117,7 @@ def _indicator_label(ind: str) -> str:
         "hicp_core": "HICP core — ex energy, food, alcohol & tobacco (y/y %)",
         "gdp_yoy": "Real GDP growth (y/y %)",
         "unemp": "Unemployment rate (%)",
+        "ip_yoy": "Industrial production, excl. construction (y/y %, cal.-adj.)",
         "ciss": "CISS (systemic stress)",
         "sent_esi": "Economic Sentiment Indicator",
         "sent_cons": "Consumer confidence",

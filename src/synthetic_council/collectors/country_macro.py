@@ -12,11 +12,16 @@ docs/data-sources/eurostat-country-macro.md):
 - Unemployment rate: Eurostat ei_lm_m_vtg TRUE VINTAGES (revdate dimension,
   2021-01 ->) where available; une_rt_m latest-revised for earlier dates
   (no online vintages pre-2021).
+- Industrial production y/y: Eurostat ei_is_m_vtg TRUE VINTAGES (s_adj=CA,
+  unit=RT12 = 12-month rate of change, NACE B-D excl. construction,
+  2021-01 ->) where available; sts_inpr_m PRD B-D CA PCH_SM latest-revised
+  for earlier dates.
 
 Release-lag model (Eurostat release calendar; doc has per-source detail):
 - HICP flash ~end of reference month, final mid-next-month  -> month m-1 at m
 - GDP QNA t+30/65d                                             -> quarter q-1 at q
 - Unemployment monthly news release ~m+1                       -> month m-1 at m
+- Industrial production first estimate ~t+40d                 -> month m-1/m-2
 """
 
 from __future__ import annotations
@@ -196,12 +201,15 @@ def fetch_country_gdp(client: httpx.Client) -> pl.DataFrame:
     )
 
 
-def fetch_country_unemp_vintages(client: httpx.Client) -> pl.DataFrame:
-    """Unemployment true vintages (ei_lm_m_vtg): revdate | geo | period | value."""
-    r = client.get(
-        f"{ESTAT_SDMX}/ei_lm_m_vtg",
-        params={"format": "TSV", "compressed": "true"},
-    )
+def _fetch_vtg(client: httpx.Client, dataset: str, keep: dict[str, str]) -> pl.DataFrame:
+    """PEEI vintage dataset -> (revdate, geo, period, value) records.
+
+    ``keep`` selects dimension values (e.g. s_adj/unit); rows whose geo is
+    not in EA_GEOS are dropped. The vintage database stores only CHANGED
+    series, so (revdate, period) cells are sparse by design — the as-of
+    join carries the latest non-missing vintage forward.
+    """
+    r = client.get(f"{ESTAT_SDMX}/{dataset}", params={"format": "TSV", "compressed": "true"})
     r.raise_for_status()
     raw = gzip.decompress(r.content)
     df = pl.read_csv(io.BytesIO(raw), separator="\t", infer_schema=False)
@@ -210,9 +218,7 @@ def fetch_country_unemp_vintages(client: httpx.Client) -> pl.DataFrame:
     records = []
     for row_i, key_str in enumerate(df[key_col].to_list()):
         dims = dict(zip(dim_names, key_str.split(","), strict=False))
-        if dims.get("unit") != "PC_ACT" or dims.get("s_adj") != "SA":
-            continue
-        if dims.get("sex") != "T" or dims.get("age") != "TOTAL":
+        if any(dims.get(k) != v for k, v in keep.items()):
             continue
         if dims.get("geo") not in EA_GEOS:
             continue
@@ -230,8 +236,47 @@ def fetch_country_unemp_vintages(client: httpx.Client) -> pl.DataFrame:
                     "value": float(m.group(1)),
                 }
             )
+    if not records:
+        return pl.DataFrame(
+            schema={
+                "revdate": pl.String,
+                "geo": pl.String,
+                "period": pl.String,
+                "value": pl.Float64,
+            }
+        )
     out = pl.DataFrame(records).with_columns(pl.col("value").cast(pl.Float64))
     return out.with_columns(pl.col("revdate").str.to_date("%Y-%m-%d"))
+
+
+def fetch_country_unemp_vintages(client: httpx.Client) -> pl.DataFrame:
+    """Unemployment true vintages (ei_lm_m_vtg): revdate | geo | period | value."""
+    return _fetch_vtg(
+        client,
+        "ei_lm_m_vtg",
+        {"unit": "PC_ACT", "s_adj": "SA", "sex": "T", "age": "TOTAL"},
+    )
+
+
+def fetch_country_ip_vintages(client: httpx.Client) -> pl.DataFrame:
+    """Industrial production y/y true vintages (ei_is_m_vtg): the RT12 unit
+    is the 12-month rate of change; CA (calendar-adjusted) is the only
+    s_adj RT12 is published with. NACE B-D = industry excl. construction."""
+    return _fetch_vtg(client, "ei_is_m_vtg", {"s_adj": "CA", "unit": "RT12", "nace_r2": "B-D"})
+
+
+def fetch_country_ip_latest(client: httpx.Client) -> pl.DataFrame:
+    """Industrial production y/y latest-revised (sts_inpr_m PRD B-D CA
+    PCH_SM) — pre-2021 fallback (no online vintages before ei_is_m_vtg)."""
+    df = _get_tsv(client, "sts_inpr_m")
+    return df.filter(
+        (pl.col("freq") == "M")
+        & (pl.col("indic_bt") == "PRD")
+        & (pl.col("nace_r2") == "B-D")
+        & (pl.col("s_adj") == "CA")
+        & (pl.col("unit") == "PCH_SM")
+        & (pl.col("geo").is_in(EA_GEOS))
+    ).select("geo", "period", "value")
 
 
 def fetch_country_unemp_latest(client: httpx.Client) -> pl.DataFrame:
@@ -247,8 +292,8 @@ def fetch_country_unemp_latest(client: httpx.Client) -> pl.DataFrame:
     ).select("geo", "period", "value")
 
 
-def _asof_unemp_vintage(vtg: pl.DataFrame, dates: pl.DataFrame) -> pl.DataFrame:
-    """As-of unemployment from true vintages.
+def _asof_vintage(vtg: pl.DataFrame, dates: pl.DataFrame, indicator: str) -> pl.DataFrame:
+    """As-of values from true vintages.
 
     A vintage row (revdate, period) is visible at meeting d if revdate <= d;
     the vintage stores only CHANGES, so for each (geo, period) take the latest
@@ -261,17 +306,22 @@ def _asof_unemp_vintage(vtg: pl.DataFrame, dates: pl.DataFrame) -> pl.DataFrame:
     return latest.select(
         "announcement_date",
         "geo",
-        pl.lit("unemp").alias("indicator"),
+        pl.lit(indicator).alias("indicator"),
         pl.col("period").alias("ref_period"),
         "value",
     )
 
 
+# kept name for the unemployment tests/callers
+def _asof_unemp_vintage(vtg: pl.DataFrame, dates: pl.DataFrame) -> pl.DataFrame:
+    return _asof_vintage(vtg, dates, "unemp")
+
+
 def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
     """Long panel: announcement_date | geo | indicator | ref_period | value.
 
-    Indicators: hicp_yoy, hicp_core, gdp_yoy, unemp (vintage when available,
-    2021+, else latest-revised with 1-month lag).
+    Indicators: hicp_yoy, hicp_core, gdp_yoy, unemp and ip_yoy (vintages
+    when available, 2021+, else latest-revised with release-calendar lags).
     """
     dates = meetings.select(pl.col("announcement_date")).unique().sort("announcement_date")
     with _client() as c:
@@ -279,6 +329,8 @@ def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
         gdp = fetch_country_gdp(c)
         unemp_vtg = fetch_country_unemp_vintages(c)
         unemp_latest = fetch_country_unemp_latest(c)
+        ip_vtg = fetch_country_ip_vintages(c)
+        ip_latest = fetch_country_ip_latest(c)
 
     out = [
         # HICP final released mid-next-month; use +17d to be safe for late
@@ -309,7 +361,7 @@ def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
 
     # unemployment: true vintages where they exist (revdate <= d), else
     # latest-revised with the LFS monthly news release (~start of m+2)
-    vint = _asof_unemp_vintage(unemp_vtg, dates) if unemp_vtg.height else None
+    vint = _asof_vintage(unemp_vtg, dates, "unemp") if unemp_vtg.height else None
     fallback_all = _asof_latest_published(unemp_latest, dates, "unemp", freq="M", avail_days=32)
     if vint is not None and vint.height:
         fallback = fallback_all.join(
@@ -320,6 +372,20 @@ def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
         out.append(pl.concat([vint, fallback]))
     else:
         out.append(fallback_all)
+
+    # industrial production: true vintages where they exist, else
+    # latest-revised with the STS first estimate (~t+40d after month end)
+    ip_vint = _asof_vintage(ip_vtg, dates, "ip_yoy") if ip_vtg.height else None
+    ip_fallback_all = _asof_latest_published(ip_latest, dates, "ip_yoy", freq="M", avail_days=40)
+    if ip_vint is not None and ip_vint.height:
+        ip_fallback = ip_fallback_all.join(
+            ip_vint.select("announcement_date", "geo"),
+            on=["announcement_date", "geo"],
+            how="anti",
+        )
+        out.append(pl.concat([ip_vint, ip_fallback]))
+    else:
+        out.append(ip_fallback_all)
 
     panel = pl.concat(out)
     return panel.sort("announcement_date", "geo", "indicator")
