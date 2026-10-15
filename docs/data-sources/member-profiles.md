@@ -45,6 +45,33 @@ and review-safe: only the section's own block is replaced, the rest of
 the profile file is preserved verbatim. Run:
 `python -m synthetic_council.member_profiles.speech_stance [Name ...]`.
 
+## GLM-5.3 web-search fill pass (2026-10-15) — replication package
+
+Tavily evidence proved too thin for ~50 members (empty trait sections or
+bare stubs). Those profiles were completed by GLM-5.3 (Z.ai) via directed
+web searches (Wikipedia, ECB/NCB bios, Reuters/Bloomberg/Bruegel
+profiles), with every raw search result archived verbatim per member
+under `data/raw/profiles/websearch/{slug}/NN-source.md` (query,
+timestamp, retrieved content, source URLs). This groundwork does NOT
+carry a reproducibility guarantee — search results are time-dependent —
+so every touched profile carries a provenance footer naming the
+generator; the profiles ship as-is in the replication package.
+
+The same pass: merged duplicate identities created by Wayback snapshot
+seams (Philip R. Lane; Georgios Provopoulos, whose 2008–14 governorship
+was split at a "George A." spelling; Pablo Hernández de Cos — tenures
+healed to one continuous span each, richer trait sections carried over);
+added the missing persons.py aliases (including the mononym account
+spellings "Rimšēvičs", "Demarco", "Vujčić", "Radev", "Delgado",
+"Dolenc", "Kālis", "Švaljek", "Žumer Šujica", "Välimäki") and rebuilt
+`account_participants.parquet` so every participant resolves to exactly
+one canonical identity; created profiles for the five participants that
+had none (Margarita Delgado, Māris Kālis, Tuomas Välimäki, Sandra
+Švaljek, Tina Žumer — mostly alternates/acting governors); deleted the
+"To be appointed" roster artifact. `tests/test_profile_coverage.py`
+now asserts every distinct participant has exactly one canonical
+profile and no non-canonical files exist.
+
 ## Governor speeches (`collectors/ncb_speeches.py`)
 
 The ECB all-speeches CSV covers Executive Board speakers only; NCB

@@ -114,6 +114,16 @@
   `--diff-runs`; `simulation/replay.py` branches a saved payload under a
   different judge with zero generator calls. Pending: FEATHERLESS_API_KEY
   for the live generator validation + a full re-run of both arms.
+- [x] Member-profile fill pass (GLM-5.3, 2026-10-15): ~50 thin profiles
+  completed via directed web search (Wikipedia, ECB/NCB bios, press
+  profiles) — raw results archived under
+  data/raw/profiles/websearch/{slug}/, provenance footers name the
+  generator, shipped in the replication package; duplicate identities
+  merged with tenures healed (Lane, Provopoulos, de Cos) + missing
+  aliases for account mononym spellings; 5 participant gaps given
+  profiles (Delgado, Kālis, Välimäki, Švaljek, Žumer); "To be
+  appointed" artifact removed; coverage test guarantees one canonical
+  profile per participant (tests/test_profile_coverage.py)
 - [x] Hawkishness reflected in profiles, not estimated as a numeric prior:
   `member_profiles/speech_stance.py` distils each member's revealed
   policy orientation (hawk/dove leanings, themes, evolution) from a spread

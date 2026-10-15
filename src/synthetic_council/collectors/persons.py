@@ -21,7 +21,6 @@ CANONICAL = {
         "Miguel Fernández Ordóñez",
         "Miguel Fernández-Ordóñez",
     ],
-    "Georgios Provopoulos": ["George Provopoulos", "Georgios A. Provopoulos"],
     "Athanasios Orphanides": ["Athanasios Orphanides"],
     "Michael C. Bonello": ["Michael Bonello"],
     "Guy Quaden": ["Guy Quaden"],
@@ -46,8 +45,29 @@ CANONICAL = {
     # Wayback snapshot typo: accent on the wrong syllable created a second
     # person entry with a 6-week tenure
     "Pablo Hernández de Cos": ["Pablo Hernandéz de Cos"],
+    # wayback handover artifact: the 6-week "Philip Lane" EB row is the
+    # Praet→Lane chief-economist transition seam; participants use the
+    # full spelling
+    "Philip R. Lane": ["Philip Lane"],
+    # "George A." spelling never made it into the original variant list —
+    # the 2008–14 Bank of Greece governorship split into two identities
+    "Georgios Provopoulos": [
+        "George Provopoulos",
+        "Georgios A. Provopoulos",
+        "George A. Provopoulos",
+    ],
+    # surname-only spellings printed in some monetary policy accounts
+    "Ilmar Rimsevics": ["Ilmārs Rimšēvičs", "Ilmars Rimsevics", "Rimšēvičs"],
+    "Alexander Demarco": ["Demarco"],
+    "Māris Kālis": ["Kālis"],
+    "Sandra Švaljek": ["Švaljek"],
+    "Tina Žumer": ["Žumer Šujica"],
+    "Boris Vujčić": ["Vujčić"],
+    "Dimitar Radev": ["Radev"],
+    "Margarita Delgado": ["Delgado"],
+    "Primož Dolenc": ["Dolenc"],
+    "Tuomas Välimäki": ["Välimäki"],
     "Zeti Aziz": [],
-    "Ilmar Rimsevics": ["Ilmārs Rimšēvičs", "Ilmars Rimsevics"],
     "Rein Minka": [],
     "Durmus Yilmaz": [],
     "Justin Yifu Lin": [],
