@@ -2,10 +2,11 @@
 
 Two independent measurements, both saved:
 
-- **Jev** — one ChoiceQuestion over the simulated closing evidence (each
-  member's final stance with its probability, plus the President's decision
-  statement), using the *same Bruegel/Trichet criteria as the ground-truth
-  extraction* in ``mpa_extract.decision_mode`` so the comparison is symmetric;
+- **choice (extractor role)** — one distribution over the simulated closing
+  evidence (each member's final stance with its probability, plus the
+  President's decision statement), using the *same Bruegel/Trichet criteria
+  as the ground-truth extraction* in ``mpa_extract.decision_mode`` so the
+  comparison is symmetric;
 - **deterministic aggregation** — a threshold mapping over the per-agent
   P(aligned with the simulated decision): unanimity if every member is
   aligned with p >= ``unanimity_min_p``; consensus if the aligned share >=
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from synthetic_council.jev import jev_choice
+from synthetic_council.inference import Client, choice
 from synthetic_council.mpa_extract.decision_mode import (
     DECISION_MODE_CRITERIA,
     DECISION_MODE_INSTRUCTIONS,
@@ -83,25 +84,28 @@ async def run_mode(
         "decision_statement": decision.statement,
         "member_positions": "\n".join(evidence_lines),
     }
-    res = await jev_choice(
-        state=state,
-        criteria=DECISION_MODE_CRITERIA,
-        instructions=(
-            DECISION_MODE_INSTRUCTIONS
-            + " Here the evidence is the simulated council's final positions "
-            "and alignment probabilities rather than account quotes."
-        ),
-        model=cfg.extractor_model,
-    )
-    if cfg.recorder is not None:
-        cfg.recorder.record_jev(
-            stage="decision-mode",
+
+    def on_event(event) -> None:
+        if cfg.recorder is not None:
+            event.context = {"stage": "decision-mode"}
+            cfg.recorder.record_event(event)
+
+    client = Client(cfg.inference)
+    try:
+        res = await choice(
+            client,
+            "extractor",
             state=state,
             criteria=DECISION_MODE_CRITERIA,
-            outcome=res.outcome,
-            probabilities=res.probabilities,
-            model=cfg.extractor_model,
+            instructions=(
+                DECISION_MODE_INSTRUCTIONS
+                + " Here the evidence is the simulated council's final positions "
+                "and alignment probabilities rather than account quotes."
+            ),
+            on_event=on_event,
         )
+    finally:
+        await client.aclose()
     return ModeResult(
         jev_label=res.outcome,
         jev_probabilities=res.probabilities,

@@ -16,6 +16,8 @@ Module: `src/synthetic_council/collectors/country_macro.py`
 | gdp_yoy | Eurostat `namq_10_gdp` | `Q.CLV_PCH_SM.SCA.B1GQ.{EA+20}` | 1975-Q1 → |
 | unemp (2021-01 →) | Eurostat `ei_lm_m_vtg` | **true vintages** (revdate) | 1983-01 → |
 | unemp (pre-2021) | Eurostat `une_rt_m` | latest-revised `PC_ACT SA T TOTAL` | 1983-01 → |
+| ip_yoy (2021-01 →) | Eurostat `ei_is_m_vtg` | **true vintages** (revdate); `CA`, NACE `B-D` excl. construction, unit `RT12` = 12-month rate of change | 1980-01 → |
+| ip_yoy (pre-2021) | Eurostat `sts_inpr_m` | latest-revised `PRD B-D CA PCH_SM` (y/y %) | 1980-01 → |
 
 - `EA` = euro area **changing composition** (matches ECB `S0`/`U2`
   convention; EA19/EA20 are fixed rosters and are never used).
@@ -60,6 +62,7 @@ modelled from the Eurostat release calendar:
 | HICP (ei_cphi_m) | flash end of ref month; final ~mid m+1 | month end + 17d |
 | GDP QNA (namq) | flash ~t+30d after quarter end | quarter end + 31d |
 | unemployment (une_rt_m) | monthly news release ~start of m+2 | month end + 32d |
+| industrial production (sts_inpr_m) | first estimate ~t+38/45d | month end + 40d |
 
 A value is included at meeting date *d* only if `avail_from <= d`
 (`join_asof` backward on date, by geo). This prevents intra-quarter look-ahead

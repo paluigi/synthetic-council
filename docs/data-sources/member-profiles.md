@@ -27,6 +27,24 @@ Re-runs do NOT overwrite existing profiles (manual review edits survive);
 `.env.local` for the Tavily step; a missing key degrades to Wikipedia +
 facts.
 
+## Speech-grounded policy orientation (`member_profiles/speech_stance.py`)
+
+Deliberately NOT a numeric hawkishness prior: each member's revealed
+policy orientation (hawkish/dovish leanings as actually expressed, the
+themes they lean on, evolution over time) is distilled by ONE
+generator-role call over an evenly-spread sample of up to 8 of their OWN
+speeches (union corpus; press coverage excluded — not their verbatim
+voice) and embedded as the profile section
+`## Policy orientation — from your own speeches`, which the memo carries
+via `profile_text`. The section is second-person, grounded only in the
+excerpts, quotes key phrases, and says so plainly when the excerpts are
+too thin to characterise an orientation. Raw sections archived per
+member under `data/processed/profiles/speech_stance/`; the call under
+`data/processed/llm_calls/speech_stance.jsonl`. Embedding is idempotent
+and review-safe: only the section's own block is replaced, the rest of
+the profile file is preserved verbatim. Run:
+`python -m synthetic_council.member_profiles.speech_stance [Name ...]`.
+
 ## Governor speeches (`collectors/ncb_speeches.py`)
 
 The ECB all-speeches CSV covers Executive Board speakers only; NCB

@@ -41,14 +41,21 @@
 Identical generator settings and speaking order (alphabetical, from the
 sorted roster) across arms.
 
-## Message archive
+## Message ledger
 
-Every generator and Jev request/response is logged per meeting to
-`{out}/{arm}/{date}/messages.jsonl` (stage, agent, round, prompts,
-response, model, usage, timestamp) plus a human-readable `transcript.md`
-(proposal → rounds → CE reply → final positions → decision). Payload JSON
-carries the structured results. The archive makes runs inspectable and
-re-usable as inputs to other experiments without re-running.
+Every LLM call is logged per meeting to `{out}/{arm}/{date}/messages.jsonl`
+as a complete `CallEvent`: call id, timestamp, kind (generator/choice),
+role, endpoint, model, sampling parameters, **full inputs** (system+user,
+or state+questions+rendered prompt), **full outputs** (content, or
+outcome+probabilities+answers), token usage and latency — plus a
+human-readable `transcript.md` (proposal → rounds → CE reply → final
+positions → decision). Payload JSON carries the structured results and a
+top-level `settings` block (see below). Any archived call can be replayed
+verbatim, so experiments can branch off any step:
+`simulation/replay.py` re-runs extraction → decision cross-check →
+alignment → mode over a saved payload's statements under the current
+`inference.toml` (e.g. a different judge), writing `payload_variant.json`
++ its own ledger with **no generator calls**.
 
 ## Comparison (`analysis/compare_arms.py`)
 
@@ -57,16 +64,38 @@ Per meeting × arm: mean/min P(aligned_sim), share aligned, simulated mode
 (a) alignment delta between arms, paired by meeting (exact sign test +
 bootstrap 95% CI); (b) decision-mode match rates + 3×3 confusion matrices
 vs the accounts ground truth; (c) direction accuracy per arm; (d) yearly
-episode breakdown.
+episode breakdown. The report header stamps the run settings
+(generator/extractor ids, sampling parameters, inference.toml hash, git
+sha); a settings-drift guard hard-fails when an arm mixes payloads from
+different settings (override: `--allow-mixed`), and `--diff-runs A B`
+prints the exact settings deltas between two payloads (e.g. an original
+vs a replay variant).
 
-## Jev semantics
+## Measurement-model semantics
 
-`typesafe-ai/jev` via the Vercel AI Gateway (`ai` package,
-`experimental_evaluate` + `ChoiceQuestion`): returns the chosen outcome
-with a full calibrated probability distribution over the criteria. TypeSafe's
-native confidence statistic saturates at 1.0 for choices (documented in
-`simulation/extraction.py`), so the position *conviction* rubric
-(ScoreQuestion, 0–2) is the usable confidence measure for statements; the
+Measurement (positions, conviction, alignment, decision modes) runs on
+the **extractor role** of `inference.toml` — `cloudflare/clef`,
+Cloudflare's open-source 27B decision model, via OpenRouter's native
+decisions API (`/api/alpha/decisions`, `api = "decisions"`). That API is
+Jev-shaped: typed questions (choice over criteria with full probability
+distributions; score over a rubric with a legend and fractional score)
+answered in one request, with per-answer confidence (kept in `raw` for
+provenance). The position *conviction* rubric (0–2, from the score
+question) remains the usable confidence measure for statements; the
 choice probabilities themselves are the usable measure everywhere else.
-Prompt versions are recorded in every output (`prompt_version` columns,
-payload fields).
+Roles without a native decisions API (`api = "chat"`, any
+OpenAI-compatible endpoint) emulate the same measurement with the
+`choice-v1` prompted-JSON protocol — parsed, validated, normalised —
+so consumers are agnostic to the backend.
+
+Legacy field names (`mode.jev_label`, `JevChoice`) are kept so pre-2026
+payloads stay readable; they now mean "choice-model label/result".
+
+## Run settings (comparability)
+
+Every payload records a `settings` block: the full inference roles
+(endpoint, model, api, sampling parameters), `choice_version`, the prompt
+versions in play (speech sections ss-v1/ss-press-v1, decision mode
+dm-v1), the simulation shape (rounds, truncation caps, concurrency,
+aggregation thresholds), the sha256 of `inference.toml` and the git
+commit — everything that determines the outcome, in one diffable block.

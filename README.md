@@ -28,23 +28,25 @@ src/synthetic_council/
   accounts.py              monetary policy accounts (2015 →, markdown)
     ncb_speeches.py         BIS speeches hub harvest (governors)
   mpa_extract/              accounts extraction: participants + voting
-    rights, decision mode (Jev over LLM-curated evidence), CE proposal
+    rights, decision mode (measurement model over verbatim evidence), CE proposal
   speech_union.py           strict-window latest-speech join (ECB + BIS)
   member_profiles/          Tavily per-trait + Wikipedia profiles,
     speech-stance memo sections, synthesis
   memo.py                   per-member markdown briefing builder (2 arms)
-  jev.py                    shared Jev choice helper (gateway)
+  inference.py              inference.toml loader, OpenAI-compatible chat client,
+    native decisions API + choice-v1 emulation, CallEvent ledger
   simulation/               LLM-agent council simulation (see below)
     agent.py                roster from accounts participants + memos
-    generator.py            statement backends: Vercel AI Gateway | OpenAI-compatible
-    extraction.py           Jev position+conviction extraction (gateway)
+    generator.py            role-bound statement generator (OpenAI-compatible)
+    extraction.py           position+conviction measurement (decisions API)
     discussion.py           CE proposal -> 2 rounds -> CE reply -> finals
     decision.py             President's decision + modal-voter cross-check
     alignment.py            per-member {aligned, non_aligned} vs sim+real
     mode.py                 simulated unanimity/consensus/majority
-    recorder.py             message archive (messages.jsonl, transcript.md)
-    runner.py               meeting orchestration, payloads
-  analysis/compare_arms.py  two-arm experiment comparison
+    recorder.py             messages.jsonl ledger + transcript.md
+    runner.py               meeting orchestration, payloads + settings block
+    replay.py               branch a saved payload: re-measure, no regeneration
+  analysis/compare_arms.py  two-arm comparison, settings stamp + drift guard
 data/
   raw/                      source dumps (parquet; accounts/ as markdown)
   processed/                curated datasets + memos_ea/ + memos_ea_country/
@@ -102,24 +104,33 @@ with the minimum bid rate (MRR_MBR) for the variable-rate-tender era
    defending or adjusting the proposal.
 3. **Final summary positions** — every member ends with an explicit
    "Position: raise/hold/lower" line.
-4. **Jev extraction** — position {raise, hold, lower} with the **full
+4. **Position extraction** — position {raise, hold, lower} with the **full
    probability distribution** plus a conviction rubric (0 tentative … 2
    committed), on the round-1 reactions ("before") and the final statements
    ("after"); per-member deltas and the council balance are recorded.
 5. **Decision** — the President formulates the decision; a modal-voter
    cross-check (voting rights from the accounts) is recorded alongside.
-6. **Alignment** — per member, Jev {aligned, non_aligned} probabilities
+6. **Alignment** — per member, {aligned, non_aligned} probabilities
    against the simulated decision AND the real ECB decision.
 7. **Simulated decision mode** — unanimity/consensus/majority measured twice:
-   Jev with the same criteria as the ground-truth extraction, and a
-   deterministic aggregation of the alignment probabilities.
+   the choice model with the same criteria as the ground-truth extraction,
+   and a deterministic aggregation of the alignment probabilities.
 
-Every generator/Jev message is archived per meeting
-(`{out}/{arm}/{date}/messages.jsonl` + `transcript.md` + `payload.json`) for
-inspection and reuse. Statements come from the gateway (`--generator
-gateway`, default `openai/gpt-4o-mini`) **or any OpenAI-compatible
-endpoint** (`--generator openai_compat`); extraction is always Jev on the
-gateway. Full methodology: `docs/methods-simulation.md`.
+**Inference is config-driven** (`inference.toml`, no provider or model in
+code): statements come from the `generator` role (GLM-5.3-Flash on
+Featherless by default); all measurement from the `extractor` role
+(`cloudflare/clef`, Cloudflare's open-source decision model, via
+OpenRouter's native decisions API — full probability distributions and
+score rubrics in one request; any chat model can emulate the same
+measurement via the `choice-v1` protocol). Every LLM call is archived per
+meeting (`{out}/{arm}/{date}/messages.jsonl` + `transcript.md` +
+`payload.json`) as a complete event — full inputs and outputs, model,
+sampling parameters, usage — so runs are inspectable and branchable
+(`simulation/replay.py` re-measures a saved payload under a different
+judge without regenerating statements). Every payload carries a `settings`
+block (roles, params, prompt versions, config hash, git sha) and
+`compare_arms` stamps it into the report with drift detection. Full
+methodology: `docs/methods-simulation.md`.
 
 ```bash
 # one meeting, one arm:
@@ -129,8 +140,12 @@ uv run python scripts/run_simulation.py 2022-07-21 --arm ea_only
 uv run python scripts/run_simulation.py --all --arm ea_only
 uv run python scripts/run_simulation.py --all --arm country
 
-# comparison report (alignment delta, mode confusion, direction accuracy):
+# comparison report (settings-stamped; drift guard; --diff-runs A B):
 uv run python -m synthetic_council.analysis.compare_arms
+
+# branch a finished meeting under the current (e.g. different) judge:
+uv run python -m synthetic_council.simulation.replay \
+    data/processed/simulations/ea_only/2022-07-21/payload.json
 
 # validate inputs without API calls:
 uv run python scripts/run_simulation.py --all --arm ea_only --dry-run
@@ -139,8 +154,9 @@ uv run python scripts/run_simulation.py --all --arm ea_only --dry-run
 uv run python scripts/simulation_smoke_live.py
 ```
 
-Requires `AI_GATEWAY_API_KEY` in `.env.local` (never committed);
-`TAVILY_API_KEY` additionally for profile building.
+Requires `OPENROUTER_API_KEY` and `FEATHERLESS_API_KEY` in `.env.local`
+(never committed; roles/points in `inference.toml`); `TAVILY_API_KEY`
+additionally for profile building.
 
 ## Reproducing everything
 

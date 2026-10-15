@@ -12,9 +12,15 @@ Usage:
     # all meetings from a year onward (e.g. the accounts era)
     uv run python scripts/run_simulation.py --all --from 2015
 
-Options: [--arm ea_only|country] [--generator gateway|openai_compat]
-[--generator-model openai/gpt-4o-mini] [--out data/processed/simulations]
+Options: [--arm ea_only|country] [--generator-model MODEL]
+[--extractor-model MODEL] [--out data/processed/simulations]
 [--resume/--no-resume]
+
+Models and providers come from inference.toml (see .env.example for the
+API keys); --generator-model/--extractor-model override the role's model
+for one-off runs. Every payload records the full settings block (models,
+sampling parameters, prompt versions, config hash, git sha) so runs stay
+comparable; messages.jsonl archives every LLM call's inputs and outputs.
 
 Arms: ``ea_only`` gives every member the euro-area-only memo
 (data/processed/memos_ea); ``country`` additionally gives national governors
@@ -24,11 +30,6 @@ their country annex (data/processed/memos_ea_country). Outputs land under
 Resume: a meeting is skipped when its payload.json already exists; delete
 the directory to re-run. Enabled by default for --all, off for explicit
 dates.
-
-Requires AI_GATEWAY_API_KEY in .env.local (extractor, always Jev via the
-Vercel AI Gateway; also the CE-proposal/decision-mode LLM fallbacks). For
---generator openai_compat also set OPENAI_COMPAT_BASE_URL,
-OPENAI_COMPAT_API_KEY (optional) and OPENAI_COMPAT_MODEL.
 
 Note: memos are not committed to the repository (data/ stays untracked);
 build them first with `uv run python -m synthetic_council.memo` (needs the
@@ -75,12 +76,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--memos-dir", type=Path, default=None, help="override the arm's memo dir")
     p.add_argument("--rounds", type=int, default=2)
     p.add_argument(
-        "--generator",
-        choices=["gateway", "openai_compat"],
-        default="gateway",
+        "--generator-model",
+        default=None,
+        help="override the generator role's model from inference.toml",
     )
-    p.add_argument("--generator-model", default="openai/gpt-4o-mini")
-    p.add_argument("--extractor-model", default="typesafe-ai/jev")
+    p.add_argument(
+        "--extractor-model",
+        default=None,
+        help="override the extractor role's model from inference.toml",
+    )
     p.add_argument("--out", type=Path, default=Path("data/processed/simulations"))
     p.add_argument(
         "--resume",
@@ -104,8 +108,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def load_env_local() -> None:
-    if os.environ.get("AI_GATEWAY_API_KEY"):
-        return
     env_local = Path(".env.local")
     if env_local.exists():
         for line in env_local.read_text().splitlines():
@@ -166,18 +168,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     load_env_local()
-    if not os.environ.get("AI_GATEWAY_API_KEY") and not args.dry_run:
-        print("AI_GATEWAY_API_KEY is not set (put it in .env.local)", file=sys.stderr)
-        return 2
-
     cfg = SimulationConfig(
         arm=args.arm,
         memos_dir=args.memos_dir,
         out_root=args.out,
-        generator_backend=args.generator,
-        generator_model=args.generator_model,
-        extractor_model=args.extractor_model,
         n_rounds=args.rounds,
+    )
+    if args.generator_model:
+        cfg.inference.role("generator").model = args.generator_model
+    if args.extractor_model:
+        cfg.inference.role("extractor").model = args.extractor_model
+
+    if not args.dry_run:
+        missing = cfg.inference.check_keys()
+        if missing:
+            print(
+                f"missing API keys (put them in .env.local): {', '.join(missing)}", file=sys.stderr
+            )
+            return 2
+
+    print(
+        f"generator: {cfg.inference.role('generator').model_id} "
+        f"{cfg.inference.role('generator').settings().get('temperature', '')}"
+    )
+    print(
+        f"extractor: {cfg.inference.role('extractor').model_id} "
+        f"{cfg.inference.role('extractor').settings().get('temperature', '')}"
     )
 
     try:

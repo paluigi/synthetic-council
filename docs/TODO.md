@@ -29,11 +29,18 @@
   snapshot 2004-07). Seed from ECB Annual Report appendices (~25 persons) if the
   simulation must start pre-2004. Needs user decision.
 - [ ] Country GDP vintages: not on Eurostat (PEEI = EA/EU only); RTD = EA only.
-  Country memos carry sentiment (+unemployment/IP vintages can be added from
-  PEEI `ei_lm_m_vtg`/`ei_is_m_vtg`).
+  Country memos carry sentiment + unemployment and industrial-production
+  TRUE vintages (PEEI `ei_lm_m_vtg`/`ei_is_m_vtg`, 2021+; latest-revised +
+  release-calendar mask before).
 
 ## Next (proposed)
-- [ ] Join PEEI country unemployment/IP vintages into the panel
+- [x] Join PEEI country unemployment/IP vintages into the panel —
+  unemployment was already true-vintage (2021+); industrial production
+  y/y added from `ei_is_m_vtg` (CA, NACE B-D excl. construction, RT12 =
+  12-month rate; true vintages 2021+, `sts_inpr_m` latest-revised with a
+  t+40d availability mask before) — `collectors/country_macro.py`;
+  panel now hicp/core/gdp/unemp/ip_yoy, 21 geos, ~31.7k rows; memo
+  country table gains the IP row
 - [x] Voting rights: accounts asterisks → per-meeting voting table (2015+) —
   `mpa_extract/participants.py`; asterisk = NO voting right (Art 10.2
   rotation), verified 2015-01-22 (4 no-vote) and 2024-12-12 (5 no-vote, 21
@@ -87,11 +94,32 @@
   press-framed memo-section prompt (`ss-press-v1`). Full run: 90 articles
   by 29 members (2024→2026-07), join 1,304 → 1,374 (+70 press links; LU
   covered for the first time). Remaining user step: rebuild
-  speech_sections + memos with `AI_GATEWAY_API_KEY` so press sections
+  speech_sections + memos with the generator key so press sections
   enter the experiment.
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
   unreachable: CY/MT; stale-sitemap: ES)
-- [ ] Hawkishness priors from speeches (Hansen–Kazinnik style LLM classification)
+- [x] Provider-agnostic inference (`inference.toml` + `inference.py`):
+  Vercel gateway + Jev removed (`ai[vercel]` dependency dropped); the
+  extractor role is `cloudflare/clef` on OpenRouter's native
+  `/api/alpha/decisions` API (full distributions + score rubrics in one
+  request; live-validated), the generator role is
+  `zai-org/GLM-5.3-Flash` on Featherless; any chat model can emulate the
+  measurement via the `choice-v1` protocol. Every LLM call archived as a
+  full CallEvent (inputs, outputs, model, params, usage, latency) —
+  per-meeting `messages.jsonl` ledger + per-context JSONL sinks for
+  utility calls; payload `settings` block (roles, params, prompt
+  versions, config hash, git sha) with compare_arms drift detection and
+  `--diff-runs`; `simulation/replay.py` branches a saved payload under a
+  different judge with zero generator calls. Pending: FEATHERLESS_API_KEY
+  for the live generator validation + a full re-run of both arms.
+- [x] Hawkishness reflected in profiles, not estimated as a numeric prior:
+  `member_profiles/speech_stance.py` distils each member's revealed
+  policy orientation (hawk/dove leanings, themes, evolution) from a spread
+  sample of their OWN speeches into the profile section "Policy
+  orientation — from your own speeches", which memos embed via
+  profile_text — qualitative Hansen–Kazinnik-style evidence inside the
+  persona, per design decision (no standalone prior); calls archived,
+  embedding idempotent and review-safe
 - [ ] CI on push (pytest + ruff)

@@ -87,13 +87,18 @@ def _section_text(speech: dict) -> str:
     else:
         head = f"SPEECH TITLE: {speech['title']}\nDATE: {speech['speech_date']}"
     user = f"{head}\n\n{body}"
-    return chat(_system_prompt(speech.get("source", "")), user, temperature=0.2).strip()
+    return chat(
+        _system_prompt(speech.get("source", "")), user, temperature=0.2, context="speech_sections"
+    ).strip()
 
 
 def build_speech_sections(
     meetings: list[str] | None = None,
     use_llm: bool = True,
 ) -> SpeechSectionsResult:
+    from synthetic_council.inference import load_config
+
+    model_id = load_config().role("generator").model_id
     join = pl.read_parquet(JOIN_PATH)
     if meetings:
         join = join.filter(pl.col("meeting_date").is_in(meetings))
@@ -124,6 +129,7 @@ def build_speech_sections(
                 "prompt_version": (
                     PRESS_PROMPT_VERSION if r["source"] == "press" else PROMPT_VERSION
                 ),
+                "model": model_id if use_llm else "reused",
             }
         )
     df = pl.DataFrame(rows)

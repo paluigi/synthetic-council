@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from synthetic_council.config import PROCESSED_DIR
+from synthetic_council.inference import InferenceConfig, load_config
 
 
 @dataclass
 class SimulationConfig:
     """Tunable knobs for the council simulation.
 
-    Generator (statements) vs extractor (positions) are separate backends:
-    statements come from any OpenAI-compatible API, position/confidence
-    extraction is always Jev via the Vercel AI Gateway.
+    All inference (statement generation on the ``generator`` role,
+    position/alignment/mode measurement on the ``extractor`` role) is
+    configured in ``inference.toml`` — providers, models and sampling
+    parameters never live here or in code. The loaded config travels with
+    the SimulationConfig and is written into every experiment payload as a
+    ``settings`` block so runs stay comparable and reproducible.
 
     The experiment ``arm`` selects the memo set: ``ea_only`` gives every
     member the euro-area-only memo; ``country`` additionally gives national
@@ -27,25 +30,8 @@ class SimulationConfig:
     memos_dir: Path | None = None  # defaults per arm (see resolved_memos_dir)
     out_root: Path = field(default_factory=lambda: PROCESSED_DIR / "simulations")
 
-    # --- generator backend (statements, discussion turns) ---------------
-    # "gateway"       -> Vercel AI Gateway via the `ai` package
-    # "openai_compat" -> any OpenAI-compatible chat-completions endpoint
-    generator_backend: str = "gateway"
-    generator_model: str = "openai/gpt-4o-mini"
-    # used only by the openai_compat backend
-    openai_compat_base_url: str = field(
-        default_factory=lambda: os.environ.get("OPENAI_COMPAT_BASE_URL", "")
-    )
-    openai_compat_api_key: str = field(
-        default_factory=lambda: os.environ.get("OPENAI_COMPAT_API_KEY", "")
-    )
-    openai_compat_model: str = field(
-        default_factory=lambda: os.environ.get("OPENAI_COMPAT_MODEL", "")
-    )
-    generator_temperature: float = 0.7
-
-    # --- extractor backend (always Jev / gateway) ------------------------
-    extractor_model: str = "typesafe-ai/jev"
+    # --- inference (see inference.toml) -----------------------------------
+    inference: InferenceConfig = field(default_factory=load_config)
 
     # --- discussion shape -------------------------------------------------
     n_rounds: int = 2  # discussion rounds for the non-CE members
@@ -80,6 +66,47 @@ class SimulationConfig:
             return PROCESSED_DIR / "memos_ea_country"
         return PROCESSED_DIR / "memos_ea"
 
+    def settings(self) -> dict:
+        """Everything that determines this run's outcome: inference roles
+        (endpoint/model/sampling), choice version, simulation shape and
+        aggregation thresholds — one diffable block for the payload."""
+        import subprocess
+
+        from synthetic_council.member_profiles.speech_sections import (
+            PRESS_PROMPT_VERSION,
+            PROMPT_VERSION,
+        )
+        from synthetic_council.mpa_extract.decision_mode import PROMPT_VERSION as DM_VERSION
+
+        try:
+            git_sha = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            ).stdout.strip()
+        except Exception:
+            git_sha = "unknown"
+        return {
+            "inference": self.inference.settings(),
+            "simulation": {
+                "n_rounds": self.n_rounds,
+                "max_statements_chars": self.max_statements_chars,
+                "max_transcript_chars": self.max_transcript_chars,
+                "max_concurrent_extractions": self.max_concurrent_extractions,
+                "unanimity_min_p": self.unanimity_min_p,
+                "consensus_share": self.consensus_share,
+                "consensus_min_p": self.consensus_min_p,
+            },
+            "prompt_versions": {
+                "speech_sections": PROMPT_VERSION,
+                "speech_sections_press": PRESS_PROMPT_VERSION,
+                "decision_mode": DM_VERSION,
+            },
+            "git_sha": git_sha,
+        }
+
     # --- message archive ---------------------------------------------------
-    # attached by the runner; every generator/Jev request+response is logged
+    # attached by the runner; every generator/choice request+response is logged
     recorder: object | None = field(default=None, repr=False, compare=False)

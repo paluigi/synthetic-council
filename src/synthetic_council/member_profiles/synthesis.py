@@ -96,7 +96,7 @@ def _llm_body(tav: dict, wiki: dict) -> str:
             f"ANSWER: {payload['answer']}\nSOURCES: {sources}"
         )
     parts.append(f"(c) Wikipedia extract:\n{(wiki.get('extract') or '')[:8000]}")
-    return chat(_SYNTH_SYSTEM, "\n\n".join(parts), temperature=0.2)
+    return chat(_SYNTH_SYSTEM, "\n\n".join(parts), temperature=0.2, context="profiles")
 
 
 def _verbatim_body(tav: dict, wiki: dict) -> str:
@@ -136,6 +136,7 @@ def build_profile(
     )
     footer = (
         f"\n\n---\nProvenance: {method} · generated {date.today().isoformat()} · "
+        f"generator: {_generator_model_id()} · "
         f"raw evidence: data/raw/profiles/tavily/{tavily.slug(person)}/, "
         f"data/raw/profiles/wikipedia/{tavily.slug(person)}.json\n"
     )
@@ -143,3 +144,12 @@ def build_profile(
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(header + body.strip() + "\n" + footer, encoding="utf-8")
     return out
+
+
+def _generator_model_id() -> str:
+    try:
+        from synthetic_council.inference import load_config
+
+        return load_config().role("generator").model_id
+    except Exception:
+        return "unknown"

@@ -1,26 +1,33 @@
-"""Minimal chat-LLM access for the accounts extraction pipeline.
+"""Minimal chat-LLM access for the accounts/profile pipelines.
 
-Reuses the simulation generator backends (Vercel AI Gateway or any
-OpenAI-compatible endpoint) so every LLM call in the project goes through one
-configurable path. No API calls are made unless a fallback needs them.
+Goes through the ``generator`` role of ``inference.toml`` (one shared,
+config-driven path for every LLM call in the project) and archives every
+call — full inputs, output, model identity, sampling params, usage — to a
+per-context JSONL sink under ``data/processed/llm_calls/`` so utility
+calls are replayable and branchable exactly like simulation calls.
 """
 
 from __future__ import annotations
 
-import asyncio
+from synthetic_council.config import PROCESSED_DIR
+from synthetic_council.inference import chat_sync, jsonl_sink, load_config
+
+LLM_CALLS_DIR = PROCESSED_DIR / "llm_calls"
 
 
-async def chat_async(system: str, user: str, temperature: float = 0.2) -> str:
-    from synthetic_council.simulation.config import SimulationConfig
-    from synthetic_council.simulation.generator import build_generator
+def chat(
+    system: str,
+    user: str,
+    temperature: float | None = None,
+    context: str = "misc",
+) -> str:
+    """One synchronous chat call on the generator role; archived to
+    ``data/processed/llm_calls/{context}.jsonl``."""
+    config = load_config()
+    sink = jsonl_sink(LLM_CALLS_DIR / f"{context}.jsonl")
 
-    cfg = SimulationConfig()
-    gen = build_generator(cfg)
-    try:
-        return await gen.generate(system, user)
-    finally:
-        await gen.aclose()
+    def on_event(event) -> None:
+        event.context = {"context": context}
+        sink(event)
 
-
-def chat(system: str, user: str, temperature: float = 0.2) -> str:
-    return asyncio.run(chat_async(system, user, temperature))
+    return chat_sync(config, "generator", system, user, temperature, on_event)

@@ -76,10 +76,10 @@ async def run_meeting(
 ) -> dict:
     """Full pipeline for one meeting; returns the JSON-serialisable payload."""
     own_generator = generator is None
-    gen = generator or build_generator(cfg)
     out_dir = cfg.out_root / cfg.arm / date
     recorder = Recorder(out_dir=out_dir, meta={"arm": cfg.arm, "meeting_date": date})
     cfg.recorder = recorder
+    gen = generator or build_generator(cfg, on_event=recorder.record_event)
     try:
         agents, skipped = load_roster(date, cfg)
         if skipped:
@@ -195,6 +195,7 @@ def _meeting_payload(
     return {
         "meeting_date": date,
         "arm": cfg.arm,
+        "settings": cfg.settings(),
         "n_agents": len(agents),
         "n_rounds": max(t.round_no for t in discussion.turns if t.round_no > 0),
         "ce_proposal": {
