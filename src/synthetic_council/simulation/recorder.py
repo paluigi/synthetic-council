@@ -38,6 +38,16 @@ class Recorder:
         if "ts" not in d or not d["ts"]:
             d["ts"] = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds")
         self._events.append(d)
+        # live progress line (the ledger itself flushes only at meeting end)
+        ctx = d["context"]
+        who = ctx.get("agent") or ctx.get("context") or ""
+        print(
+            f"  [{self.meta.get('meeting_date', '')}] {d['kind']} {who} "
+            f"{d['model']} {d['latency_ms']:.0f}ms "
+            f"in={d['usage'].get('input_tokens', 0)} "
+            f"out={d['usage'].get('output_tokens', 0)}",
+            flush=True,
+        )
 
     def flush(self) -> Path:
         path = self.out_dir / "messages.jsonl"
