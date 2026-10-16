@@ -105,6 +105,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="re-run meetings even if their payload.json exists",
     )
     p.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="meetings to run concurrently (they are independent); total API "
+        "concurrency scales with this — lower the per-meeting statement/"
+        "extraction semaphores accordingly",
+    )
+    p.add_argument(
+        "--statement-concurrency",
+        type=int,
+        default=None,
+        help="override cfg.max_concurrent_statements (per meeting)",
+    )
+    p.add_argument(
+        "--extraction-concurrency",
+        type=int,
+        default=None,
+        help="override cfg.max_concurrent_extractions (per meeting)",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="validate config + inputs, then exit without any API calls",
@@ -189,6 +209,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.inference.role("generator").model = args.generator_model
     if args.extractor_model:
         cfg.inference.role("extractor").model = args.extractor_model
+    if args.statement_concurrency:
+        cfg.max_concurrent_statements = args.statement_concurrency
+    if args.extraction_concurrency:
+        cfg.max_concurrent_extractions = args.extraction_concurrency
 
     if not args.dry_run:
         missing = cfg.inference.check_keys()
@@ -230,7 +254,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from synthetic_council.simulation.runner import run_simulation
 
-    written = asyncio.run(run_simulation(to_run, cfg))
+    if args.parallel > 1:
+        print(
+            f"parallel: {args.parallel} meetings concurrently | "
+            f"statements/meal={cfg.max_concurrent_statements} | "
+            f"extractions/meal={cfg.max_concurrent_extractions}"
+        )
+    written = asyncio.run(run_simulation(to_run, cfg, parallel=args.parallel))
     for path in written:
         payload = json.loads(path.read_text())
         cons = payload["consensus"]

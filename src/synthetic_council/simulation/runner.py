@@ -24,7 +24,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from dataclasses import asdict
+import sys
+import time
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import polars as pl
@@ -261,18 +263,56 @@ def _transcript_blocks(
     return blocks
 
 
-async def run_simulation(dates: list[str], cfg: SimulationConfig) -> list[Path]:
-    """Run several meetings sequentially, one payload per meeting directory."""
+async def run_simulation(
+    dates: list[str], cfg: SimulationConfig, parallel: int = 1
+) -> list[Path]:
+    """Run the meetings, one payload per meeting directory.
+
+    ``parallel > 1`` runs that many meetings concurrently — meetings are
+    independent (all inputs are precomputed artefacts), so this is safe; each
+    task gets its own shallow ``SimulationConfig`` copy because ``run_meeting``
+    attaches its Recorder through ``cfg.recorder``. One failed meeting does
+    not stop the others; its error is reported at the end.
+    """
     for d in dates:
         if not _DATE_RE.match(d):
             raise ValueError(f"meeting date must be YYYY-MM-DD, got {d!r}")
+    if parallel < 1:
+        raise ValueError("parallel must be >= 1")
+
+    sem = asyncio.Semaphore(parallel)
     written: list[Path] = []
-    for d in dates:
-        payload = await run_meeting(d, cfg)
-        out = cfg.out_root / cfg.arm / d / "payload.json"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        written.append(out)
+    failures: list[tuple[str, BaseException]] = []
+
+    async def one(d: str) -> None:
+        async with sem:
+            own = replace(cfg)  # per-meeting recorder slot (run_meeting mutates it)
+            try:
+                payload = await run_meeting(d, own)
+            except Exception as exc:
+                print(f"ERROR {d}: {type(exc).__name__}: {exc}", flush=True)
+                failures.append((d, exc))
+                return
+            out = cfg.out_root / cfg.arm / d / "payload.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            written.append(out)
+
+    started = time.monotonic()
+    await asyncio.gather(*(one(d) for d in dates))
+    if failures:
+        print(
+            f"{len(failures)} meeting(s) failed:", file=sys.stderr
+        )
+        for d, exc in failures:
+            print(f"  {d}: {type(exc).__name__}: {exc}", file=sys.stderr)
+    if written:
+        mins = (time.monotonic() - started) / 60
+        print(
+            f"{len(written)} meetings written in {mins:.0f} min "
+            f"({mins / len(written):.1f} min/meeting wall, parallel={parallel})",
+            flush=True,
+        )
     return written
 
 
