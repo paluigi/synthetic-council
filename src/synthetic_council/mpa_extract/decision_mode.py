@@ -148,10 +148,17 @@ def build_evidence(meeting_date: str, markdown: str, use_llm: bool = True) -> tu
     quotes: list[str] = []
     method = "keyword_fallback"
     if use_llm:
-        answer = chat(EVIDENCE_SYSTEM, sec[:60_000], context="decision_mode")
-        quotes = _parse_quotes(answer)
-        if quotes:
-            method = "llm"
+        try:
+            answer = chat(EVIDENCE_SYSTEM, sec[:60_000], context="decision_mode")
+            quotes = _parse_quotes(answer)
+            if quotes:
+                method = "llm"
+            elif not answer.strip():
+                print(f"WARNING {meeting_date}: generator returned empty content "
+                      "(token budget?) — keyword fallback")
+        except Exception as exc:  # config/endpoint trouble must not kill the run
+            print(f"WARNING {meeting_date}: evidence curation failed ({exc}) — "
+                  "keyword fallback")
     if not quotes:
         quotes = keyword_harvest(sec)
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)

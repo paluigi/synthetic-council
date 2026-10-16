@@ -348,10 +348,19 @@ def test_run_meeting_writes_archive_and_settings(cfg: SimulationConfig):
     payload = json.loads((out / "payload.json").read_text())
     assert payload["meeting_date"] == MEETING
 
-    # settings block: models, sampling params, config hash recorded
+    # settings block: models, sampling params, config hash recorded — the
+    # payload must faithfully mirror whatever inference.toml configures (the
+    # whole point of the config file is that models are NOT hardcoded)
     settings = payload["settings"]
-    assert settings["inference"]["roles"]["generator"]["model"] == "zai-org/GLM-5.3-Flash"
-    assert settings["inference"]["roles"]["extractor"]["model"] == "cloudflare/clef"
+    from synthetic_council.inference import load_config
+
+    live = load_config()
+    assert settings["inference"]["roles"]["generator"]["model"] == live.role(
+        "generator"
+    ).model
+    assert settings["inference"]["roles"]["extractor"]["model"] == live.role(
+        "extractor"
+    ).model
     assert settings["inference"]["config_sha256"]
     assert settings["simulation"]["n_rounds"] == 2
     assert settings["prompt_versions"]["decision_mode"] == "dm-v1"
@@ -374,10 +383,11 @@ def test_run_meeting_writes_archive_and_settings(cfg: SimulationConfig):
         assert m["model"] and m["endpoint"]
         assert m.get("system") or m.get("state")  # full input present
     # generator events record the actual role model, not a stale default
+    # (compared against the live config — models are never hardcoded)
     gen_events = [m for m in messages if m["kind"] == "chat"]
-    assert all(m["model"] == "zai-org/GLM-5.3-Flash" for m in gen_events)
+    assert all(m["model"] == live.role("generator").model for m in gen_events)
     choice_events = [m for m in messages if m["kind"] == "choice"]
-    assert all(m["model"] == "cloudflare/clef" for m in choice_events)
+    assert all(m["model"] == live.role("extractor").model for m in choice_events)
     assert all("probabilities" in m or "content" in m for m in messages)
 
     transcript = (out / "transcript.md").read_text()
