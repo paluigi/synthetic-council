@@ -19,6 +19,7 @@ final statements ("after"), preserving the pre/post delta analysis.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 
 from synthetic_council.simulation.agent import Agent
@@ -147,21 +148,37 @@ async def run_discussion(
     result = DiscussionResult(proposal=proposal, chief_economist=ce.person)
     result.turns.append(DiscussionTurn(0, ce.person, proposal))
 
+    sem = asyncio.Semaphore(cfg.max_concurrent_statements)
     for round_no in range(1, cfg.n_rounds + 1):
+        if round_no == 1:
+            # round-1 reactions depend only on the proposal and each agent's
+            # own memo/profile — generate concurrently (turns still land in
+            # roster order below, so the transcript is unchanged)
+
+            async def one(a: Agent) -> str:
+                system, user = a.reaction_prompt(cfg, ce.person, proposal)
+                async with sem:
+                    return await _recorded_generate(
+                        generator, cfg, system, user,
+                        stage="round-1", agent=a.person, round_no=1,
+                    )
+
+            texts = await asyncio.gather(*(one(a) for a in others))
+            result.turns.extend(
+                DiscussionTurn(1, a.person, t) for a, t in zip(others, texts, strict=True)
+            )
+            continue
         for agent in others:  # alphabetical by person (roster is sorted)
-            if round_no == 1:
-                system, user = agent.reaction_prompt(cfg, ce.person, proposal)
-            else:
-                system = DISCUSSION_TURN_PROMPT.format(
-                    person=agent.person,
-                    role_line=agent.role_line,
-                    round_no=round_no,
-                    n_rounds=cfg.n_rounds,
-                    proposal=proposal,
-                    transcript=result.transcript(cfg.max_transcript_chars),
-                    max_chars=cfg.max_statements_chars,
-                )
-                user = "Give your statement for this round now."
+            system = DISCUSSION_TURN_PROMPT.format(
+                person=agent.person,
+                role_line=agent.role_line,
+                round_no=round_no,
+                n_rounds=cfg.n_rounds,
+                proposal=proposal,
+                transcript=result.transcript(cfg.max_transcript_chars),
+                max_chars=cfg.max_statements_chars,
+            )
+            user = "Give your statement for this round now."
             text = await _recorded_generate(
                 generator,
                 cfg,
@@ -215,8 +232,13 @@ async def run_final_statements(
     generator: BaseGenerator,
     cfg: SimulationConfig,
 ) -> None:
-    """After the discussion, each agent produces a final in-character statement."""
-    for agent in agents:
+    """After the discussion, each agent produces a final in-character statement.
+
+    The transcript is complete at this point, so the statements are mutually
+    independent and generate concurrently (bounded for rate limits)."""
+    sem = asyncio.Semaphore(cfg.max_concurrent_statements)
+
+    async def one(agent: Agent) -> None:
         system = FINAL_STATEMENT_PROMPT.format(
             person=agent.person,
             role_line=agent.role_line,
@@ -224,12 +246,15 @@ async def run_final_statements(
             transcript=discussion.transcript(cfg.max_transcript_chars),
             max_chars=cfg.max_statements_chars,
         )
-        agent.final_statement = await _recorded_generate(
-            generator,
-            cfg,
-            system,
-            "Give your final statement now.",
-            stage="final-statement",
-            agent=agent.person,
-            round_no=None,
-        )
+        async with sem:
+            agent.final_statement = await _recorded_generate(
+                generator,
+                cfg,
+                system,
+                "Give your final statement now.",
+                stage="final-statement",
+                agent=agent.person,
+                round_no=None,
+            )
+
+    await asyncio.gather(*(one(a) for a in agents))

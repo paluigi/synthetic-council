@@ -40,6 +40,10 @@ class SimulationConfig:
 
     # --- concurrency -------------------------------------------------------
     max_concurrent_extractions: int = 8
+    # round-1 reactions and final statements are transcript-independent, so
+    # they generate concurrently (rounds 2+ stay sequential by design — each
+    # speaker sees the transcript so far); bounded for provider rate limits
+    max_concurrent_statements: int = 6
 
     # --- ground-truth inputs (CE proposal anchor, real decisions) ---------
     ce_proposal_path: Path = field(
@@ -95,6 +99,7 @@ class SimulationConfig:
                 "max_statements_chars": self.max_statements_chars,
                 "max_transcript_chars": self.max_transcript_chars,
                 "max_concurrent_extractions": self.max_concurrent_extractions,
+                "max_concurrent_statements": self.max_concurrent_statements,
                 "unanimity_min_p": self.unanimity_min_p,
                 "consensus_share": self.consensus_share,
                 "consensus_min_p": self.consensus_min_p,
