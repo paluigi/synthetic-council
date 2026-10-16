@@ -1,4 +1,4 @@
-"""Collector: ECB speeches (official all-speeches CSV) + last-speech-before-meeting.
+"""Collector: ECB speeches (official all-speeches CSV).
 
 The ECB publishes a precompiled dataset with the full text of all speeches by
 Executive Board members (and EMI-era speeches) at
@@ -10,8 +10,8 @@ websites; collecting those is left as a TODO (see docs/TODO.md) — for now the
 memo pipeline falls back to the most recent ECB-level speech content.
 
 Output:
-- data/raw/speeches/speeches.parquet  (full corpus)
-- data/processed/last_speech_before_meeting.parquet (one row per meeting x speaker)
+- data/raw/speeches/speeches.parquet  (full corpus; the per-meeting join
+  lives in speech_union.py → latest_speech_per_meeting.parquet)
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ import polars as pl
 
 from synthetic_council.config import (
     ECB_SPEECHES_CSV_PAGE,
-    PROCESSED_DIR,
     RAW_DIR,
     USER_AGENT,
 )
@@ -100,50 +99,11 @@ def parse_pipe_csv(raw: bytes) -> pl.DataFrame:
     ).with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
 
 
-def last_speech_before_meetings(
-    speeches: pl.DataFrame, meetings: pl.DataFrame, max_age_days: int = 120
-) -> pl.DataFrame:
-    """For each (meeting date, speaker), the most recent speech before the meeting.
-
-    `meetings` must have columns: date (Date), is_decision_day (bool).
-    """
-    sp = (
-        speeches.filter(pl.col("contents").str.len_bytes() > 200)  # substantive texts only
-        .with_columns(pl.col("speakers").str.split("|").list.first().alias("speaker"))
-        .select("date", "speaker", "title", "subtitle", "contents")
-        .sort("date")
-    )
-    decisions = (
-        meetings.filter(pl.col("is_decision_day")).select(pl.col("announcement_date").alias("date"))
-        if "announcement_date" in meetings.columns
-        else meetings.filter(pl.col("is_decision_day")).select("date")
-    ).unique()
-    out = sp.join_where(
-        decisions,
-        pl.col("date") < pl.col("date_right"),
-        (pl.col("date_right") - pl.col("date")).dt.total_days() <= max_age_days,
-    )
-    # keep only the latest speech per (meeting, speaker)
-    return (
-        out.sort("date_right", descending=True)
-        .unique(subset=["date_right", "speaker"], keep="first")
-        .rename({"date": "speech_date", "date_right": "meeting_date"})
-        .sort("meeting_date", "speaker")
-    )
-
-
 def collect() -> SpeechesResult:
     raw = download_csv()
     df = parse_pipe_csv(raw)
     (RAW_DIR / "speeches").mkdir(parents=True, exist_ok=True)
     df.write_parquet(SPEECHES_RAW_PATH)
-    # last-speech join needs the decision calendar; write it if available
-    dec_path = PROCESSED_DIR / "gc_decisions.parquet"
-    if dec_path.exists():
-        dec = pl.read_parquet(dec_path).with_columns(pl.lit(True).alias("is_decision_day"))
-        last = last_speech_before_meetings(df, dec)
-        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-        last.write_parquet(PROCESSED_DIR / "last_speech_before_meeting.parquet")
     return SpeechesResult(
         n_speeches=df.height,
         n_speakers=df.select(pl.col("speakers").n_unique()).item(),

@@ -94,3 +94,24 @@ class TestKnownNonMembers:
             rows = parts.filter(pl.col("person") == person)
             if rows.height:
                 assert rows["country"].unique().to_list() == [country], person
+
+
+class TestProfilePersonaCard:
+    def test_roles_line_kept_country_dropped(self, tmp_path, monkeypatch):
+        """The memo persona keeps the verified **Roles:** line but drops the
+        **Country:** scaffolding (memo.profile_text)."""
+        from synthetic_council import memo
+
+        (tmp_path / "Ada Test.md").write_text(
+            "# Member profile — Ada Test\n\n"
+            "**Country:** XX\n\n"
+            "**Roles:** Governor, Test Bank, 2020-01-01 → 2026-12-31\n\n"
+            "## Approach to the price stability mandate\n\n"
+            "Hawkish leanings.\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(memo, "PROFILES_DIR", tmp_path)
+        card = memo.profile_text("Ada Test")
+        assert "**Roles:** Governor, Test Bank" in card
+        assert "**Country:**" not in card
+        assert "## Approach" in card

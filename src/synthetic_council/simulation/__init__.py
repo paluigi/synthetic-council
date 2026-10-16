@@ -8,18 +8,21 @@ Pipeline per meeting (anchored to the real accounts):
    responds to colleagues (round 2); the Chief Economist always gets a reply
    turn after the discussion. Statements come from a configurable
    OpenAI-compatible generator backend.
-3. Jev (via the Vercel AI Gateway) extracts each reacting member's position
-   (raise/hold/lower) + full probability distribution + conviction from the
-   round-1 statements, and again from everyone's final statements.
+3. The extractor role from ``inference.toml`` (a native decisions model such
+   as Clef on OpenRouter, or any chat model via the choice-v1 protocol)
+   measures each reacting member's position (raise/hold/lower) + full
+   probability distribution + conviction from the round-1 statements, and
+   again from everyone's final statements.
 4. The President formulates the decision; a modal-voter cross-check is
    recorded alongside.
-5. Per member, Jev classifies {aligned, non_aligned} against the simulated
-   decision AND the real ECB decision (full distributions saved).
+5. Per member, the extractor classifies {aligned, non_aligned} against the
+   simulated decision AND the real ECB decision (full distributions saved).
 6. The simulated decision mode (unanimity/consensus/majority) is measured
-   twice: Jev with the same criteria as the ground-truth extraction, and a
-   deterministic aggregation of the alignment probabilities.
+   twice: the extractor with the same criteria as the ground-truth
+   extraction, and a deterministic aggregation of the alignment
+   probabilities.
 
-Every generator/Jev message is archived per meeting (messages.jsonl,
+Every generator/extractor message is archived per meeting (messages.jsonl,
 transcript.md) for inspection and reuse. Experiment arms: ``ea_only`` vs
 ``country`` (governors additionally see their country annex).
 """

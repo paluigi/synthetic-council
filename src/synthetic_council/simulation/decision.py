@@ -88,16 +88,6 @@ async def run_decision(
             "No president on the roster; decision taken by the modal position "
             f"of voting members: {modal}."
         )
-        if cfg.recorder is not None:
-            cfg.recorder.record(
-                stage="decision",
-                system="",
-                user=positions,
-                response=statement,
-                model="(deterministic)",
-                agent=None,
-                round_no=None,
-            )
         return Decision(
             president="(none)",
             statement=statement,

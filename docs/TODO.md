@@ -28,12 +28,15 @@
 - [ ] 1999–2004 (99 meetings): no GC membership records (earliest Wayback
   snapshot 2004-07). Seed from ECB Annual Report appendices (~25 persons) if the
   simulation must start pre-2004. Needs user decision.
-- [ ] Country GDP vintages: not on Eurostat (PEEI = EA/EU only); RTD = EA only.
-  Country memos carry sentiment + unemployment and industrial-production
-  TRUE vintages (PEEI `ei_lm_m_vtg`/`ei_is_m_vtg`, 2021+; latest-revised +
-  release-calendar mask before).
 
 ## Next (proposed)
+- [x] Country GDP vintages: OECD STES revisions dataflow (`oecd_gdp_vintages.py`)
+  — true vintages per MEI edition (199902→), 17 of 20 geos (every OECD
+  member; CY/MT/HR stay latest-revised + calendar mask); within-edition y/y
+  from XDC volume levels; Eurostat flash splice for the newest quarter (same
+  policy as the EA RTD load lag). Closes the previously documented "country
+  GDP vintages not on Eurostat" limitation — see
+  `docs/data-sources/oecd-stes-revisions.md`.
 - [x] Join PEEI country unemployment/IP vintages into the panel —
   unemployment was already true-vintage (2021+); industrial production
   y/y added from `ei_is_m_vtg` (CA, NACE B-D excl. construction, RT12 =
@@ -82,20 +85,15 @@
   for legacy listing-walk rows (ex-governors speaking as BIS management).
   Join 1,187 → 1,304 links. Remaining for the news layer (TinyFish, key
   pending): PT/LU interviews and one-off gaps
-- [ ] TinyFish news layer for post-2023 gaps BIS lacks (PT, LU,
-  one-offs): search with after/before date windows + fetch, labelled as
-  press coverage rather than verbatim speech — blocked on
-  TINYFISH_API_KEY in .env.local
 - [x] TinyFish press layer built, live-validated and fully run
   (`collectors/press_speeches.py` + `docs/data-sources/press-tinyfish.md`):
   search (news+web, date-bounded) → policy-signal gate → fetch with
   published-date window clip → subject check (headline or body-head) →
   `press` corpus rows that only fill gaps in the strict-window join;
-  press-framed memo-section prompt (`ss-press-v1`). Full run: 90 articles
-  by 29 members (2024→2026-07), join 1,304 → 1,374 (+70 press links; LU
-  covered for the first time). Remaining user step: rebuild
-  speech_sections + memos with the generator key so press sections
-  enter the experiment.
+  press-framed memo-section prompt (`ss-press-v1`). Full run: 109 articles
+  by 33 members (2024→2026-09), join now carries 80 press links (LU
+  covered for the first time). speech_sections + memos rebuilt with the
+  generator key, so press sections are in the experiment.
   (sitemap-first, JSON-LD parsing, tenure-based speaker matching, pypdf for
   PDFs). Remaining gaps documented in docs/data-sources/ncb-websites.md
   (JS-rendered sites: BE/IE/SI/LV/BG/LU/HR/AT; bot-blocked: NL/PT/GR/LT;
@@ -112,8 +110,9 @@
   utility calls; payload `settings` block (roles, params, prompt
   versions, config hash, git sha) with compare_arms drift detection and
   `--diff-runs`; `simulation/replay.py` branches a saved payload under a
-  different judge with zero generator calls. Pending: FEATHERLESS_API_KEY
-  for the live generator validation + a full re-run of both arms.
+  different judge with zero generator calls. Generator live-validated
+  (all 1,409 speech sections generated via Featherless GLM-5.3-Flash).
+  Remaining: the full two-arm run itself.
 - [x] Member-profile fill pass (GLM-5.3, 2026-10-15): ~50 thin profiles
   completed via directed web search (Wikipedia, ECB/NCB bios, press
   profiles) — raw results archived under
@@ -132,4 +131,33 @@
   profile_text — qualitative Hansen–Kazinnik-style evidence inside the
   persona, per design decision (no standalone prior); calls archived,
   embedding idempotent and review-safe
-- [ ] CI on push (pytest + ruff)
+- [x] Pre-run review fixes (2026-10-16): 2019-04-10 attendees parse (bare
+  `Members` heading variant — was silently falling back to the Wayback
+  roster with a "To be appointed" agent and fabricated voting rights);
+  load_roster warns on fallback and the payload carries `roster_source`;
+  speech-sections index upserts on subset runs and records `reused` vs
+  the generating model honestly; the memo persona keeps the verified
+  `**Roles:**` line; Knot's speech-grounded orientation moved inside the
+  2,500-char cap; chat-API decision emulation archives one CallEvent per
+  question; replay variants refresh per-agent alignment; dead artifacts
+  removed (last_speech_before_meeting.parquet, legacy recorder shapes)
+- [x] CE anchors completed (2026-10-16): 95/97 meetings anchored. The 25
+  formerly-failed extractions filled manually (GLM-5.3,
+  `extraction_method='manual-glm53'`) with verbatim, fragment-verified
+  account quotes — 2015–16 old-format meetings anchor on the formal
+  decision line (proposal attributed to the President, `ce_mismatch`
+  flagged); only the two non-rate meetings stay unanchored. Run set is
+  now 94 meetings, 2015-01-22 → 2026-09-10
+- [x] 2026-09-10 meeting added end-to-end: foedb refresh → account
+  fetched (97 total) → participants (27 attendees) → deterministic CE
+  anchor (Lane, +25bp hike) → speeches for the new window (ECB CSV to
+  2026-09-30, BIS +17 to 2026-10-13, press +19 to 109) → macro panel →
+  join/sections/memos for both arms
+- [x] EA industrial production pre-2021: `sts_inpr_m` aggregate (EA19 /
+  EA20 → EA, overlap resolved to EA20) spliced under the PEEI true
+  vintages — EA ip_yoy now spans 1999→2026 in the panel
+- [x] Decision-mode ground truth built (97 meetings,
+  `account_decision_mode.parquet`): verbatim evidence curation +
+  unanimity/consensus/majority classification, so compare_arms'
+  mode-vs-ground-truth sections populate
+- CI on push: not planned (user decision, 2026-10-16)

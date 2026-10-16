@@ -3,7 +3,8 @@
 ## What they are
 
 The "accounts" of the Governing Council's monetary policy meetings — published
-~4 weeks after each meeting since February 2015 (96 accounts as of 2026-09).
+~4 weeks after each meeting since February 2015 (97 accounts as of 2026-10,
+through the 2026-09-10 meeting).
 Each account has §1 "Review of financial, economic and monetary developments
 and policy options" (closing with the Chief Economist's proposal) and §2
 "Governing Council's discussion and monetary policy decisions", followed by an
@@ -41,8 +42,10 @@ the last day of the meeting range ("3-5 June 2025" → 2025-06-05).
 Three accounts cover meetings without a rate decision and are flagged
 `is_rate_meeting=false` in the index (excluded from the decision-anchored
 pipeline): 2020-03-18 (PEPP emergency meeting), 2021-07-07 (strategy-review
-conclusion), 2025-06-25 (non-rate meeting). 2019-04-10 has no attendees block
-at all (upstream); flagged in the participants extractor.
+conclusion), 2025-06-25 (non-rate meeting). 2019-04-10 once parsed to zero
+participants because its attendees block uses a bare `Members` heading line
+(no `##`/`**` marker) — the heading regex now accepts that variant, so all
+97 accounts parse.
 
 ## Calendar cross-fix (decisions.py)
 
@@ -60,8 +63,9 @@ decision calendar, now fixed:
 ## Attendees & voting rights
 
 Layouts differ by era: `### Members` with plain lines and `(\*)` markers
-(2015), `**Members**` with bullet lists and trailing `\*` (2016–2020),
-`#### Members` with bullets (2024+). **The asterisk marks members NOT holding
+(2015), `**Members**` with bullet lists and trailing `\*` (2016–2020), the
+bare `Members` line (e.g. 2019-04-10), `#### Members` with bullets (2024+).
+**The asterisk marks members NOT holding
 a voting right that month** under the rotation system (Article 10.2 ESCB
 Statute; footnote captured verbatim per meeting) — Executive Board members
 never carry it. Alternates appear as "Mr Demarco, temporarily replacing Mr
@@ -85,10 +89,18 @@ in late-2025 accounts).
   correct rotation math).
 - `data/processed/account_ce_proposal.parquet` — Chief Economist proposal
   text (verbatim), speaker, direction (hike/cut/hold), bp, method
-  (deterministic | llm | failed). 69/96 deterministic; the rest (mostly
-  2015–2017 package proposals with no "<CE> proposed" sentence) use the LLM
-  fallback at runtime. Direction validated: every non-null deterministic
-  hike/cut matches the real decision except 3 PEPP-pace edge cases.
+  (deterministic | llm | manual-glm53 | failed). 70/97 extract
+  deterministically (the modern "<CE> proposed" phrasings). 25 more were
+  filled manually (GLM-5.3, 2026-10-16, `extraction_method='manual-glm53'`):
+  verbatim quotes from the accounts — the 2015–16 old-format meetings anchor
+  on the formal decision line ("on a proposal from the President…", speaker
+  recorded as such, `ce_mismatch=true`), the post-2017 ones quote the
+  proposal passages the deterministic patterns miss (colon-lists, members'
+  summaries). Every quote is fragment-verified against the account markdown.
+  Only the two non-rate meetings (2021-07-07, 2025-06-25) remain `failed` —
+  nothing to anchor. Direction validated: every non-null hike/cut matches
+  the real decision except documented edge cases (2015-12-03 deposit-rate
+  cut with MRO unchanged; 2022-06-09 July-hike signal at a hold meeting).
 - `data/processed/account_decision_mode.parquet` — unanimity/consensus/
   majority probabilities (Jev) over LLM-curated verbatim evidence quotes
   stored in `data/processed/decision_mode_evidence/`.

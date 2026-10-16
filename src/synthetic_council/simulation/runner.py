@@ -198,6 +198,10 @@ def _meeting_payload(
         "settings": cfg.settings(),
         "n_agents": len(agents),
         "n_rounds": max(t.round_no for t in discussion.turns if t.round_no > 0),
+        # how attendance was sourced: "participants" (accounts extract) or
+        # "memos_fallback" (no participants rows — voting rights are then
+        # defaults, not records; treat such meetings with care)
+        "roster_source": agents[0].roster_source if agents else "none",
         "ce_proposal": {
             "chief_economist": prop["chief_economist"],
             "text": prop["proposal_text"],

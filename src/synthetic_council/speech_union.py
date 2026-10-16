@@ -8,8 +8,10 @@ qualify for at most one meeting, which keeps the extracted stance sections
 stable and reusable. When no speech falls in the window the member simply has
 no speech section in that meeting's memo.
 
-Roster source: ``account_participants`` (2015+, attendance as recorded in the
-accounts) with a memberships fallback for pre-2015 meetings.
+Roster source: ``account_participants`` (attendance as recorded in the
+accounts). The join therefore starts at the first accounts meeting
+(2015-01-22); pre-2015 meetings intentionally get no speech links — the
+simulation is accounts-anchored and never runs them.
 
 Output: data/processed/latest_speech_per_meeting.parquet (+ .csv without text)
 """

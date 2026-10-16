@@ -76,6 +76,26 @@ class TestParticipants:
         assert entries[0]["name"] == "Kaasik"
         assert entries[0]["voting_right"] is True
 
+    def test_bare_members_heading(self):
+        # 2019-04-10 layout: plain "Members" line (no ## / ** **), bulleted
+        # names with escaped-asterisk no-vote markers, "**Other ECB staff**"
+        # terminating the block — previously parsed to zero participants
+        entries, footnote = parse_members_block(
+            "**Meeting of the ECB's Governing Council, 9-10 April 2019**\n\n"
+            "Members\n\n"
+            "* Mr Draghi, President\n"
+            "* Mr Knot\n"
+            "* Mr Costa\\*\n\n"
+            "\\* Members not holding a voting right in April 2019 "
+            "under Article 10.2 of the ESCB Statute.\n\n"
+            "**Other ECB staff**\n\n* Ms Graeff, Director General Communications\n"
+        )
+        by_name = {e["name"]: e for e in entries}
+        assert set(by_name) == {"Draghi", "Knot", "Costa"}
+        assert by_name["Costa"]["voting_right"] is False
+        assert by_name["Knot"]["voting_right"] is True
+        assert "not holding a voting right" in footnote
+
 
 class TestCeProposal:
     def test_direction_hold(self):

@@ -301,15 +301,18 @@ class Client:
         latency = data.pop("_latency_ms")
         content = (data["choices"][0]["message"]["content"] or "").strip()
         u = data.get("usage", {}) or {}
+        # native input/output tokens win; OpenAI-style prompt/completion only
+        # as fallback for providers that report just those
+        inp = u.get("input_tokens")
+        if inp is None:
+            inp = u.get("prompt_tokens")
+        out_tok = u.get("output_tokens")
+        if out_tok is None:
+            out_tok = u.get("completion_tokens")
         usage = {
-            k: u.get(v)
-            for k, v in (
-                ("input_tokens", "input_tokens"),
-                ("output_tokens", "output_tokens"),
-                ("input_tokens", "prompt_tokens"),
-                ("output_tokens", "completion_tokens"),
-            )
-            if u.get(v) is not None
+            k: v
+            for k, v in (("input_tokens", inp), ("output_tokens", out_tok))
+            if v is not None
         }
         return ChatResult(
             content=content,
@@ -452,10 +455,11 @@ async def decision(
             on_event(event)
         return answers, usage
 
-    # chat emulation: one prompted call per question
+    # chat emulation: one prompted call per question — each archived as its
+    # own CallEvent (the native decisions branch archives one event for all
+    # questions; parity matters for replaying/branching experiments)
     answers = {}
     usage: dict[str, int] = {}
-    last_event: CallEvent | None = None
     for name, q in questions.items():
         if q["type"] == "choice":
             res = await choice(client, role_name, state, q["criteria"], q["instructions"])
@@ -473,26 +477,28 @@ async def decision(
                 "probabilities": res.probabilities,
                 "legend": rubric,
             }
+        q_usage = {"input_tokens": res.input_tokens, "output_tokens": res.output_tokens}
         usage = {
-            "input_tokens": res.input_tokens,
-            "output_tokens": res.output_tokens,
+            "input_tokens": usage.get("input_tokens", 0) + q_usage["input_tokens"],
+            "output_tokens": usage.get("output_tokens", 0) + q_usage["output_tokens"],
         }
-        last_event = CallEvent(
-            kind="choice",
-            role=role_name,
-            endpoint=role.endpoint,
-            model=role.model,
-            params=role.params,
-            state=state,
-            questions={name: q},
-            answers=answers[name],
-            content=res.raw.get("content", ""),
-            raw=res.raw,
-            usage=usage,
-            context=context or {},
-        )
-    if last_event is not None and on_event is not None:
-        on_event(last_event)
+        if on_event is not None:
+            on_event(
+                CallEvent(
+                    kind="choice",
+                    role=role_name,
+                    endpoint=role.endpoint,
+                    model=role.model,
+                    params=role.params,
+                    state=state,
+                    questions={name: q},
+                    answers=answers[name],
+                    content=res.raw.get("content", ""),
+                    raw=res.raw,
+                    usage=q_usage,
+                    context=context or {},
+                )
+            )
     return answers, usage
 
 

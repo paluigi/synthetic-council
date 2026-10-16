@@ -35,7 +35,10 @@ from synthetic_council.mpa_extract.ce_tenure import chief_economist_on
 ACCOUNTS_DIR = RAW_DIR / "accounts"
 OUT_PATH = PROCESSED_DIR / "account_participants.parquet"
 
-_MEMBERS_HEADING_RE = re.compile(r"^(?:#{2,4}\s+Members|\*\*Members\*\*)\s*$", re.MULTILINE)
+# heading variants seen 2015→: "## Members", "**Members**" (2016-20) and the
+# bare "Members" line (e.g. 2019-04-10, whose layout otherwise yields zero
+# participants and silently degrades every downstream consumer)
+_MEMBERS_HEADING_RE = re.compile(r"^(?:#{2,4}\s+Members|\*\*Members\*\*|Members)\s*$", re.MULTILINE)
 _NEXT_HEADING_RE = re.compile(r"^(?:#{1,4}\s|\*\*)")
 _STAR_MARKER_RE = re.compile(r"\(\*+\)|\\*+|\*+")
 _NUM_MARKER_RE = re.compile(r"\(\d+\)|[¹²³]")

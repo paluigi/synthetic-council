@@ -39,60 +39,6 @@ class Recorder:
             d["ts"] = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds")
         self._events.append(d)
 
-    # --- legacy shape kept for readers of older archives -------------------
-
-    def record(
-        self,
-        stage: str,
-        system: str,
-        user: str,
-        response: str,
-        model: str,
-        agent: str | None = None,
-        round_no: int | None = None,
-        usage: dict | None = None,
-    ) -> None:
-        self._events.append(
-            {
-                "ts": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
-                "kind": "generator",
-                "stage": stage,
-                "agent": agent,
-                "round": round_no,
-                "model": model,
-                "system": system,
-                "user": user,
-                "response": response,
-                "usage": usage or {},
-                **self.meta,
-            }
-        )
-
-    def record_jev(
-        self,
-        stage: str,
-        state: dict,
-        criteria: dict,
-        outcome: str,
-        probabilities: dict,
-        model: str,
-        agent: str | None = None,
-    ) -> None:
-        self._events.append(
-            {
-                "ts": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
-                "kind": "jev",
-                "stage": stage,
-                "agent": agent,
-                "model": model,
-                "state": state,
-                "criteria": criteria,
-                "outcome": outcome,
-                "probabilities": probabilities,
-                **self.meta,
-            }
-        )
-
     def flush(self) -> Path:
         path = self.out_dir / "messages.jsonl"
         with path.open("a", encoding="utf-8") as fh:

@@ -190,4 +190,9 @@ def load_roster(date: str, cfg: SimulationConfig) -> tuple[list[Agent], list[str
             f"no memos for meeting {date} in {memos_dir} "
             "(build them first: uv run python -m synthetic_council.memo)"
         )
+    print(
+        f"WARNING {date}: no account participants for this date — falling back "
+        "to the memo-filename roster (roles/countries from memo headers, "
+        "voting_right defaults to True for everyone)"
+    )
     return load_agents(paths), []

@@ -99,8 +99,9 @@ async def replay_meeting(payload_path: Path, cfg: SimulationConfig) -> Path:
     variant = dict(payload)
     variant["settings"] = cfg.settings()
     variant["replay_of"] = str(payload_path)
+    align_by_person = {a.person: a for a in alignment}
     variant["agents"] = [
-        {**a_saved, **_updated_agent_fields(a_live)}
+        {**a_saved, **_updated_agent_fields(a_live, align_by_person)}
         for a_saved, a_live in zip(payload["agents"], agents, strict=True)
     ]
     variant["decision"] = {
@@ -124,14 +125,20 @@ async def replay_meeting(payload_path: Path, cfg: SimulationConfig) -> Path:
     return out
 
 
-def _updated_agent_fields(a: Agent) -> dict:
+def _updated_agent_fields(a: Agent, align_by_person: dict) -> dict:
     from synthetic_council.simulation.runner import _deltas
 
-    return {
+    fields = {
         "extraction_initial": asdict(a.initial_extraction) if a.initial_extraction else None,
         "extraction_final": asdict(a.final_extraction) if a.final_extraction else None,
         "deltas": _deltas(a) if a.initial_extraction and a.final_extraction else None,
     }
+    if a.person in align_by_person:  # stale judge probabilities must not survive
+        fields["alignment"] = {
+            "sim": align_by_person[a.person].p_aligned_sim,
+            "real": align_by_person[a.person].p_aligned_real,
+        }
+    return fields
 
 
 def _modal_voters(agents: list[Agent], decision: Decision):

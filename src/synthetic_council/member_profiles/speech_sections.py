@@ -109,6 +109,7 @@ def build_speech_sections(
     for r in join.iter_rows(named=True):
         fname = f"{r['meeting_date']}_{_slug(r['person'])}.md"
         out = SECTIONS_DIR / fname
+        generated = False
         if out.exists():
             text = out.read_text(encoding="utf-8").strip()
             n_existing += 1
@@ -116,6 +117,7 @@ def build_speech_sections(
             text = _section_text(r)
             n_calls += 1
             out.write_text(text + "\n", encoding="utf-8")
+            generated = True
         else:
             continue
         rows.append(
@@ -129,10 +131,21 @@ def build_speech_sections(
                 "prompt_version": (
                     PRESS_PROMPT_VERSION if r["source"] == "press" else PROMPT_VERSION
                 ),
-                "model": model_id if use_llm else "reused",
+                # only claim the current model for text generated in THIS
+                # run — a reused file's true generator lives in older archives
+                "model": model_id if generated else "reused",
             }
         )
     df = pl.DataFrame(rows)
+    if meetings is not None and INDEX_PATH.exists():
+        # subset run: upsert instead of truncating — meetings not in this
+        # invocation keep their index rows (their .md files stay untouched)
+        untouched = pl.read_parquet(INDEX_PATH).filter(
+            ~pl.col("meeting_date").is_in(meetings)
+        )
+        df = pl.concat([untouched, df], how="vertical_relaxed").sort(
+            "meeting_date", "person"
+        )
     df.write_parquet(INDEX_PATH)
     df.write_csv(INDEX_PATH.with_suffix(".csv"))
     return SpeechSectionsResult(

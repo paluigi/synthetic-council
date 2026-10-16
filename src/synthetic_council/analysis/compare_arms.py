@@ -1,7 +1,8 @@
 """Two-arm experiment comparison (point 4).
 
 Reads the per-meeting payloads of both arms
-(``data/processed/simulations_{ea_only,country}/{date}/payload.json``) and the
+(``data/processed/simulations/{arm}/{date}/payload.json``, arm in
+{ea_only, country}) and the
 ground truth (decision-mode labels from the accounts, real rate decisions)
 and produces ``data/experiments/comparison/``:
 
@@ -103,7 +104,9 @@ def per_meeting_frame() -> pl.DataFrame:
                             for a in agents
                             if a.get("alignment")
                         )
-                        / max(1, sum(1 for a in agents if a.get("alignment")))
+                        / n_aligned
+                        if (n_aligned := sum(1 for a in agents if a.get("alignment")))
+                        else None
                     ),
                     "mode_jev": p["mode"]["jev_label"],
                     "mode_deterministic": p["mode"]["deterministic_label"],

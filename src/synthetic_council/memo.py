@@ -152,8 +152,13 @@ def profile_text(person: str) -> str:
     text = re.sub(r"^# .*?\n", "", text, count=1)
     parts = text.split("\n---\n")
     body = parts[0]
-    # keep the roles/facts lines; drop the "**Country:**/blank scaffolding lines
-    lines = [ln for ln in body.splitlines() if ln.strip() and not ln.startswith("**")]
+    # keep the verified **Roles:** facts line; drop the "**Country:**" and
+    # other bold scaffolding lines
+    lines = [
+        ln
+        for ln in body.splitlines()
+        if ln.strip() and (not ln.startswith("**") or ln.startswith("**Roles:**"))
+    ]
     return "\n".join(lines).strip()[:2_500]
 
 
@@ -350,7 +355,7 @@ def build_memos(
 
 if __name__ == "__main__":
     meetings = pl.read_parquet(PROCESSED_DIR / "gc_decisions.parquet")
-    memberships = pl.read_parquet("data/raw/gc_memberships_wayback.parquet")
+    memberships = pl.read_parquet(RAW_DIR / "gc_memberships_wayback.parquet")
     macro = pl.read_parquet(PROCESSED_DIR / "macro_asof_panel.parquet")
     projections = pl.read_parquet(RAW_DIR / "mpd_projections.parquet")
     for annex, name in ((False, "memos_ea"), (True, "memos_ea_country")):
@@ -359,7 +364,7 @@ if __name__ == "__main__":
             memberships,
             macro,
             projections,
-            Path(f"data/processed/{name}"),
+            PROCESSED_DIR / name,
             country_annex=annex,
         )
         print(res)

@@ -85,7 +85,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="override the extractor role's model from inference.toml",
     )
-    p.add_argument("--out", type=Path, default=Path("data/processed/simulations"))
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="output root (default: <data>/processed/simulations, absolute)",
+    )
     p.add_argument(
         "--resume",
         dest="resume",
@@ -104,7 +109,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="validate config + inputs, then exit without any API calls",
     )
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.out is None:  # absolute default — a relative one splits the payload
+        # tree when the CLI is invoked from another cwd
+        from synthetic_council.config import PROCESSED_DIR
+
+        args.out = PROCESSED_DIR / "simulations"
+    return args
 
 
 def load_env_local() -> None:
