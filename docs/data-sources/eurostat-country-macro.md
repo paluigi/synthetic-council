@@ -13,11 +13,12 @@ Module: `src/synthetic_council/collectors/country_macro.py`
 |---|---|---|---|
 | hicp_yoy | Eurostat `prc_hicp_minr` | `M.RCH_A.TOTAL.{EA+20}` | 1996-01 → |
 | hicp_core | Eurostat `prc_hicp_minr` | `M.RCH_A.TOT_X_NRG_FOOD.{EA+20}` | 1996-01 → |
-| gdp_yoy | Eurostat `namq_10_gdp` | `Q.CLV_PCH_SM.SCA.B1GQ.{EA+20}` | 1975-Q1 → |
+| gdp_yoy (17 OECD members) | OECD STES revisions | **true vintages** (MEI editions, `B1GQ_Q.XDC` levels → within-edition y/y; see `oecd-stes-revisions.md`) | editions 199902 → |
+| gdp_yoy (CY/MT/HR; flash splice) | Eurostat `namq_10_gdp` | latest-revised `Q.CLV_PCH_SM.SCA.B1GQ` + quarter-end+31d mask | 1975-Q1 → |
 | unemp (2021-01 →) | Eurostat `ei_lm_m_vtg` | **true vintages** (revdate) | 1983-01 → |
 | unemp (pre-2021) | Eurostat `une_rt_m` | latest-revised `PC_ACT SA T TOTAL` | 1983-01 → |
 | ip_yoy (2021-01 →) | Eurostat `ei_is_m_vtg` | **true vintages** (revdate); `CA`, NACE `B-D` excl. construction, unit `RT12` = 12-month rate of change | 1980-01 → |
-| ip_yoy (pre-2021) | Eurostat `sts_inpr_m` | latest-revised `PRD B-D CA PCH_SM` (y/y %) | 1980-01 → |
+| ip_yoy (pre-2021) | Eurostat `sts_inpr_m` | latest-revised `PRD B-D CA PCH_SM` (y/y %); the EA aggregate publishes as `EA19`/`EA20` — both map to `EA`, overlap resolved to EA20 | 1980-01 → |
 
 - `EA` = euro area **changing composition** (matches ECB `S0`/`U2`
   convention; EA19/EA20 are fixed rosters and are never used).
@@ -76,12 +77,28 @@ The same m+2 timing applies to the EA unemployment series in
 
 - **True vintages** where they exist online: unemployment 2021-01 → via
   `ei_lm_m_vtg` (revdate dimension; value for period p at meeting d = latest
-  revdate <= d; vintages store only changes, so missing = unchanged).
-- **Latest-revised + availability calendar** elsewhere (country HICP/GDP all
-  eras, unemployment pre-2021): honest about the limitation; Eurostat hosts
-  no country HICP/GDP vintages before 2014 (and none at all for HICP/GDP via
-  the public API — `ei_na_q_vtg` covers EA/EU aggregates only).
+  revdate <= d; vintages store only changes, so missing = unchanged);
+  **GDP 1999-03 → via OECD MEI editions** for the 17 OECD-member countries
+  (`oecd-stes-revisions.md`; vintage of the OECD's re-dissemination of the
+  national data — one rung below a first-release archive).
+- **Latest-revised + availability calendar** elsewhere (country HICP all
+  eras, GDP for CY/MT/HR, unemployment pre-2021): honest about the
+  limitation; Eurostat hosts no country HICP vintages before 2014 (and none
+  at all for HICP via the public API — `ei_na_q_vtg` covers EA/EU aggregates
+  only).
 - EA aggregates use true RTD vintages (2001+; see `ecb-rtd-mpd.md`).
+
+## GDP: OECD vintages + Eurostat flash splice
+
+Country GDP now comes from OECD MEI editions (true vintages, 1999-03 →, 17
+of 20 geos). OECD editions trail the national flash by ~1-2 months, so the
+Eurostat latest-revised + quarter-end+31d row is spliced in only where its
+masked flash quarter is strictly newer than the newest quarter in the
+visible OECD edition (for a just-published quarter the latest-revised
+Eurostat value IS the first vintage) or where no OECD edition exists at all
+(pre-1999-03 meetings, CY/MT/HR). On equal `ref_period` the OECD vintage
+wins — same concat/sort/keep-last idiom as the EA RTD load-lag splice in
+`macro_panel.py`. Detail: `oecd-stes-revisions.md`.
 
 ## EA splice (RTD load lag)
 
@@ -95,11 +112,14 @@ HICP 2026-06 = 2.8, GDP 2026-Q1 = 0.33 (RTD), unemp 2026-05 = 6.3.
 
 ## Verification anchors
 
-- 2022-07-21: DE hicp 8.3, core 4.2, GDP 2022-Q1 3.7, unemp 2.8 (2022-05,
-  vintage) — all match Eurostat/Euro-indicators releases of that week.
-- 2026-07-23: DE hicp 2.4 (2026-06), core 2.3, GDP 2026-Q1 0.6, unemp 3.8 —
-  matches current Eurostat data.
+- 2022-07-21: DE hicp 8.3, core 4.2, GDP 2022-Q1 3.76 (OECD edition-202206
+  vintage — the then-published value, not today's revised 3.7), unemp 2.8
+  (2022-05, vintage) — HICP/unemp match Eurostat/Euro-indicators releases of
+  that week; GDP matches the OECD anchor in `oecd-stes-revisions.md`.
+- 2026-07-23: DE hicp 2.4 (2026-06), core 2.3, GDP 2026-Q1 0.34 (OECD
+  edition 202606), unemp 3.8 — matches current data sources.
 - 2011-04-07: FR hicp 2.2 (2011-02), DE core 0.9 — matches April 2011
-  Euro-indicator releases.
+  Euro-indicator releases; FR GDP 2010-Q4 1.47 / DE 3.98 match the
+  INSEE/Destatis releases of that week (OECD vintages).
 - `prc_hicp_minr` DE 2026-07 core (`TOT_X_NRG_FOOD`) = 2.6 — matches the
   Eurostat release.

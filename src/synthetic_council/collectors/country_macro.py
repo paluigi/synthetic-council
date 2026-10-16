@@ -7,8 +7,11 @@ docs/data-sources/eurostat-country-macro.md):
 - Headline + core HICP (monthly y/y): Eurostat prc_hicp_manr
   TOTAL (all-items) + TOT_X_NRG_FOOD (core: ex energy, food, alcohol &
   geo = EA (changing composition) + 20 EA countries, 1997-01 ->.
-- Real GDP growth (quarterly y/y): Eurostat namq_10_gdp CLV_PCH_SM SCA B1GQ
-  (chain-linked volumes, percentage change vs same quarter of previous year).
+- Real GDP growth (quarterly y/y): OECD MEI edition vintages
+  (oecd_gdp_vintages.py; true vintages 1999 -> for the 17 OECD-member EA
+  countries) spliced with Eurostat namq_10_gdp CLV_PCH_SM SCA B1GQ
+  latest-revised + release-calendar mask (CY/MT/HR always; the newest flash
+  quarter elsewhere — see _gdp_oecd_splice).
 - Unemployment rate: Eurostat ei_lm_m_vtg TRUE VINTAGES (revdate dimension,
   2021-01 ->) where available; une_rt_m latest-revised for earlier dates
   (no online vintages pre-2021).
@@ -267,16 +270,28 @@ def fetch_country_ip_vintages(client: httpx.Client) -> pl.DataFrame:
 
 def fetch_country_ip_latest(client: httpx.Client) -> pl.DataFrame:
     """Industrial production y/y latest-revised (sts_inpr_m PRD B-D CA
-    PCH_SM) — pre-2021 fallback (no online vintages before ei_is_m_vtg)."""
-    df = _get_tsv(client, "sts_inpr_m")
-    return df.filter(
+    PCH_SM) — pre-2021 fallback (no online vintages before ei_is_m_vtg).
+
+    The EA aggregate is disseminated as EA19 (pre-2020 composition) and EA20;
+    both map to the panel's EA geo. Where the two series overlap in a period,
+    EA20 wins (the composition the ECB's EA label refers to today)."""
+    df = _get_tsv(client, "sts_inpr_m").filter(
         (pl.col("freq") == "M")
         & (pl.col("indic_bt") == "PRD")
         & (pl.col("nace_r2") == "B-D")
         & (pl.col("s_adj") == "CA")
         & (pl.col("unit") == "PCH_SM")
-        & (pl.col("geo").is_in(EA_GEOS))
-    ).select("geo", "period", "value")
+        & pl.col("geo").is_in([*EA_GEOS, "EA19", "EA20"])
+    )
+    ea20_periods = df.filter(pl.col("geo") == "EA20")["period"].unique()
+    return (
+        df.filter(~((pl.col("geo") == "EA19") & pl.col("period").is_in(ea20_periods)))
+        .with_columns(
+            pl.col("geo").replace_strict({"EA19": "EA", "EA20": "EA"}, default=pl.col("geo"))
+        )
+        .select("geo", "period", "value")
+        .unique(subset=["geo", "period"], keep="first")
+    )
 
 
 def fetch_country_unemp_latest(client: httpx.Client) -> pl.DataFrame:
@@ -317,12 +332,42 @@ def _asof_unemp_vintage(vtg: pl.DataFrame, dates: pl.DataFrame) -> pl.DataFrame:
     return _asof_vintage(vtg, dates, "unemp")
 
 
+def _gdp_oecd_splice(oecd: pl.DataFrame, fallback_all: pl.DataFrame) -> pl.DataFrame:
+    """Country GDP rows: OECD edition vintages, Eurostat path filling the gaps.
+
+    The Eurostat latest-revised + release-calendar rows are used only where
+    (a) no OECD edition is visible at the meeting (pre-1999-03 meetings, and
+    CY/MT/HR which are not OECD members), or (b) the Eurostat flash quarter
+    is strictly NEWER than the newest quarter in the visible OECD edition —
+    OECD editions trail the national flash by ~1-2 months, and for a
+    just-published quarter the latest-revised Eurostat value IS the first
+    vintage (same splice policy as the EA RTD load lag in macro_panel.py).
+    On equal ref_period the OECD vintage wins.
+    """
+    if oecd.height == 0:
+        return fallback_all
+    oecd = oecd.select("announcement_date", "geo", "indicator", "ref_period", "value")
+    # concat + stable sort + keep-last implements the rule: the row with the
+    # NEWEST ref_period survives, and on equal periods the OECD vintage row
+    # (appended last; stable sort) wins over the latest-revised Eurostat row.
+    # Same idiom as the EA RTD splice in macro_panel.py.
+    return (
+        pl.concat([fallback_all, oecd])
+        .sort("ref_period")
+        .unique(subset=["announcement_date", "geo", "indicator"], keep="last")
+        .sort("announcement_date", "geo")
+    )
+
+
 def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
     """Long panel: announcement_date | geo | indicator | ref_period | value.
 
-    Indicators: hicp_yoy, hicp_core, gdp_yoy, unemp and ip_yoy (vintages
-    when available, 2021+, else latest-revised with release-calendar lags).
+    Indicators: hicp_yoy, hicp_core, gdp_yoy, unemp and ip_yoy. True
+    vintages: OECD MEI editions for GDP (1999+), PEEI for unemp/ip (2021+);
+    else latest-revised with release-calendar lags.
     """
+    from synthetic_council.collectors import oecd_gdp_vintages
+
     dates = meetings.select(pl.col("announcement_date")).unique().sort("announcement_date")
     with _client() as c:
         hicp = fetch_country_hicp(c)
@@ -331,6 +376,12 @@ def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
         unemp_latest = fetch_country_unemp_latest(c)
         ip_vtg = fetch_country_ip_vintages(c)
         ip_latest = fetch_country_ip_latest(c)
+
+    # OECD edition vintages (may be empty when the harvest has not run —
+    # then gdp_yoy is latest-revised Eurostat + calendar mask everywhere)
+    gdp_oecd = oecd_gdp_vintages.asof_gdp(dates).with_columns(
+        pl.lit("gdp_yoy").alias("indicator")
+    )
 
     out = [
         # HICP final released mid-next-month; use +17d to be safe for late
@@ -349,13 +400,18 @@ def build_country_macro(meetings: pl.DataFrame) -> pl.DataFrame:
             freq="M",
             avail_days=17,
         ),
-        # QNA flash estimate ~t+30/31d after quarter end
-        _asof_latest_published(
-            gdp.drop("indicator"),
-            dates,
-            "gdp_yoy",
-            freq="Q",
-            avail_days=31,
+        # GDP: OECD vintage value for the quarter as published in the newest
+        # MEI edition visible at the meeting; QNA flash splice via
+        # _gdp_oecd_splice when the Eurostat release-calendar quarter is newer
+        _gdp_oecd_splice(
+            gdp_oecd,
+            _asof_latest_published(
+                gdp.drop("indicator"),
+                dates,
+                "gdp_yoy",
+                freq="Q",
+                avail_days=31,
+            ),
         ),
     ]
 

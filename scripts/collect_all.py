@@ -89,7 +89,13 @@ def main() -> None:
         f"date_mismatches={acc.n_date_mismatches}"
     )
 
-    step("6/9 macro as-of panel (RTD/PEEI vintages, CISS, sentiment)")
+    step("5b/9 OECD MEI GDP vintages (country gdp_yoy true vintages)")
+    from synthetic_council.collectors import oecd_gdp_vintages
+
+    vtg = oecd_gdp_vintages.collect()
+    print(f"oecd gdp vintage rows={vtg.height} editions={vtg['edition'].n_unique()}")
+
+    step("6/9 macro as-of panel (RTD/PEEI vintages, OECD GDP vintages, CISS, sentiment)")
     from synthetic_council.collectors import macro_panel
 
     panel = macro_panel.collect(dec)
@@ -135,7 +141,7 @@ def main() -> None:
             memberships,
             panel,
             pl.read_parquet(RAW_DIR / "mpd_projections.parquet"),
-            Path(f"data/processed/{name}"),
+            PROCESSED_DIR / name,
             country_annex=annex,
         )
         print(res)

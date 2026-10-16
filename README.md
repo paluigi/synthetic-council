@@ -24,6 +24,7 @@ src/synthetic_council/
     speeches.py             official ECB speeches dataset + last-speech join
     macro.py                PEEI vintages, RTD HICP vintages, CISS, sentiment
     macro_panel.py          as-of macro panel per meeting
+    oecd_gdp_vintages.py    OECD MEI edition archive: country GDP true vintages
     projections.py          ECB/Eurosystem staff projections (MPD)
   accounts.py              monetary policy accounts (2015 →, markdown)
     ncb_speeches.py         BIS speeches hub harvest (governors)
@@ -62,6 +63,7 @@ references/references.bib   curated bibliography with abstracts
 uv sync
 uv run python -m synthetic_council.collectors.foedb
 uv run python -m synthetic_council.collectors.decisions
+uv run python -m synthetic_council.collectors.oecd_gdp_vintages
 uv run python -m synthetic_council.collectors.macro_panel
 uv run python -m synthetic_council.collectors.projections
 uv run python -m synthetic_council.memo
@@ -83,7 +85,7 @@ Every dataset documents its endpoints, discovery path and verification in
 | `account_decision_mode.parquet` | unanimity/consensus/majority + probs | 2015 → 2026 | Jev over LLM-curated §2 evidence |
 | `speeches.parquet` | 3,052 (ECB) + 47 (BIS) + NCB-web/blog harvest | 1997 → 2026-09 | ECB CSV + BIS hub + NCB websites + ECB blog |
 | `latest_speech_per_meeting.parquet` | strict window (see speech_union) | 2015 → 2026 | union of all speech corpora |
-| `macro_asof_panel.parquet` | ~39.5k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + CISS + DG-ECFIN |
+| `macro_asof_panel.parquet` | ~45.1k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + OECD STES revisions (country GDP vintages) + CISS + DG-ECFIN |
 | `staff_projections.parquet` | 161,066 | 2000 → 2026 | ECB MPD |
 | `memos_ea/` + `memos_ea_country/` | 5,200 briefings each | 2004 → 2026 | assembled (experiment arms) |
 | `member_profiles/` | one reviewable .md per member | — | Tavily + Wikipedia + facts |
