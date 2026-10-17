@@ -330,6 +330,13 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--allow-mixed", action="store_true", help="skip the settings-drift guard")
     p.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="simulations root to read (default: data/processed/simulations); "
+        "a custom root writes its report under data/experiments/comparison_<name>",
+    )
+    p.add_argument(
         "--diff-runs",
         nargs=2,
         metavar=("PAYLOAD_A", "PAYLOAD_B"),
@@ -337,6 +344,12 @@ def main(argv: list[str] | None = None) -> None:
         "(e.g. an original and a replay variant)",
     )
     args = p.parse_args(argv)
+
+    global SIM_ROOT, OUT_DIR  # noqa: PLW0603 -- CLI override of module roots
+    if args.root is not None:
+        SIM_ROOT = args.root.resolve()
+        name = SIM_ROOT.name.removeprefix("simulations").strip("_") or "comparison"
+        OUT_DIR = Path("data/experiments") / f"comparison_{name}"
 
     if args.diff_runs:
         a = json.loads(Path(args.diff_runs[0]).read_text(encoding="utf-8")).get("settings", {})
