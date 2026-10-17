@@ -292,17 +292,12 @@ class Client:
             ],
         }
         body.update({k: v for k, v in params.items() if k != "retries"})
-        data = await self._post_with_retries(
-            endpoint,
-            "/chat/completions",
-            body,
-            int(params.get("retries", DEFAULT_RETRIES)),
-        )
         # a stressed endpoint can return 200 with no content field (or empty
         # content) — retry those instead of propagating an empty generation
         empty_retries = int(params.get("empty_content_retries", 3))
         latency = 0.0
         content = ""
+        data: dict[str, Any] = {}
         for i in range(empty_retries + 1):
             data = await self._post_with_retries(
                 endpoint,
