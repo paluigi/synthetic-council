@@ -50,8 +50,20 @@ CONFIG_PATH = PACKAGE_ROOT / "inference.toml"
 CHOICE_VERSION = "choice-v1"
 DEFAULT_RETRIES = 3
 
-# sampling parameter names allowed on roles (flow to the API + archives)
-_SAMPLING_PARAMS = ("temperature", "top_p", "max_tokens", "retries")
+# sampling parameter names allowed on roles (flow to the API + archives);
+# thinking/reasoning_effort are provider reasoning switches (structured
+# values), retries/empty_content_retries are client-side control knobs
+# that must NOT be sent in the request body
+_SAMPLING_PARAMS = (
+    "temperature",
+    "top_p",
+    "max_tokens",
+    "retries",
+    "empty_content_retries",
+    "thinking",
+    "reasoning_effort",
+)
+_NON_BODY_PARAMS = ("retries", "empty_content_retries")
 
 
 @dataclass
@@ -291,7 +303,7 @@ class Client:
                 {"role": "user", "content": user},
             ],
         }
-        body.update({k: v for k, v in params.items() if k != "retries"})
+        body.update({k: v for k, v in params.items() if k not in _NON_BODY_PARAMS})
         # a stressed endpoint can return 200 with no content field (or empty
         # content) — retry those instead of propagating an empty generation
         empty_retries = int(params.get("empty_content_retries", 3))
@@ -306,7 +318,10 @@ class Client:
                 int(params.get("retries", DEFAULT_RETRIES)),
             )
             latency += data.pop("_latency_ms")
-            content = ((data["choices"][0]["message"].get("content")) or "").strip()
+            # a stressed endpoint can also return 200 with an error body that
+            # carries no choices array — treat that like empty content
+            choices = data.get("choices") or [{}]
+            content = (((choices[0].get("message")) or {}).get("content") or "").strip()
             if content or i == empty_retries:
                 break
             await asyncio.sleep(5 * 2**i)

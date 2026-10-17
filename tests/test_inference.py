@@ -347,3 +347,30 @@ class TestReplayBranch:
             "position-extraction",
             "decision-mode",
         }
+
+
+class TestChatRobustness:
+    def test_retries_when_choices_missing(self, tmp_path, monkeypatch):
+        """A 200 body without a choices array (endpoint error body) must be
+        retried like empty content, not crash the caller with KeyError."""
+
+        async def _no_sleep(_s):
+            return None
+
+        monkeypatch.setattr("synthetic_council.inference.asyncio.sleep", _no_sleep)
+        outputs = iter(
+            [
+                {"error": {"message": "overloaded"}},
+                {"choices": [{"message": {"content": "hello there"}}]},
+            ]
+        )
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(200, json=next(outputs))
+
+        client = _mock_client(_config(tmp_path), handler)
+        res = asyncio.run(client.chat(role_name="generator", system="s", user="u"))
+        assert res.content == "hello there"
+        assert calls["n"] == 2

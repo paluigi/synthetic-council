@@ -28,10 +28,11 @@ api_key_env = "TOGETHER_API_KEY"
 endpoint = "featherless"
 model = "zai-org/GLM-5.3-Flash"
 temperature = 0.7
-# GLM's p95 output on the closest logged workload (speech sections) is
-# ~1.2k tokens; 2.5k bounds the reasoning tail without truncating any
-# legitimate <=600-word statement. (Muse-Spark needed 16k — kept below
-# for reference, it reasons extensively before answering.)
+# GLM-5.3-Flash reasons so heavily by default that a small budget is
+# entirely consumed before any content appears (probed live: out=2500,
+# finish=length, content='') — disable thinking for statement-grade
+# generation instead (probed: ~1.2k tokens, finish=stop, full content)
+thinking = { type = "disabled" }
 max_tokens = 2500
 retries = 4
 
