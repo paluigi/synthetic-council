@@ -298,10 +298,23 @@ class Client:
             body,
             int(params.get("retries", DEFAULT_RETRIES)),
         )
-        latency = data.pop("_latency_ms")
-        # .get: a stressed endpoint occasionally returns 200 with no content
-        # field at all — that must surface as an empty generation, not a crash
-        content = ((data["choices"][0]["message"].get("content")) or "").strip()
+        # a stressed endpoint can return 200 with no content field (or empty
+        # content) — retry those instead of propagating an empty generation
+        empty_retries = int(params.get("empty_content_retries", 3))
+        latency = 0.0
+        content = ""
+        for i in range(empty_retries + 1):
+            data = await self._post_with_retries(
+                endpoint,
+                "/chat/completions",
+                body,
+                int(params.get("retries", DEFAULT_RETRIES)),
+            )
+            latency += data.pop("_latency_ms")
+            content = ((data["choices"][0]["message"].get("content")) or "").strip()
+            if content or i == empty_retries:
+                break
+            await asyncio.sleep(5 * 2**i)
         u = data.get("usage", {}) or {}
         # native input/output tokens win; OpenAI-style prompt/completion only
         # as fallback for providers that report just those
