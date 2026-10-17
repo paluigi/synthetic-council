@@ -299,7 +299,9 @@ class Client:
             int(params.get("retries", DEFAULT_RETRIES)),
         )
         latency = data.pop("_latency_ms")
-        content = (data["choices"][0]["message"]["content"] or "").strip()
+        # .get: a stressed endpoint occasionally returns 200 with no content
+        # field at all — that must surface as an empty generation, not a crash
+        content = ((data["choices"][0]["message"].get("content")) or "").strip()
         u = data.get("usage", {}) or {}
         # native input/output tokens win; OpenAI-style prompt/completion only
         # as fallback for providers that report just those
