@@ -28,11 +28,12 @@ api_key_env = "TOGETHER_API_KEY"
 endpoint = "featherless"
 model = "zai-org/GLM-5.3-Flash"
 temperature = 0.7
-# GLM-5.3-Flash reasons so heavily by default that a small budget is
-# entirely consumed before any content appears (probed live: out=2500,
-# finish=length, content='') — disable thinking for statement-grade
-# generation instead (probed: ~1.2k tokens, finish=stop, full content)
-thinking = { type = "disabled" }
+# GLM-5.3-Flash burns its whole budget reasoning before any content
+# appears (probed: out=2500, finish=length, content=''), and disabling
+# thinking did not reduce pipeline consumption — reasoning_effort=low
+# is the setting that fits the budget (probed: ~150 tokens, finish=stop,
+# full content)
+reasoning_effort = "low"
 max_tokens = 2500
 retries = 4
 
