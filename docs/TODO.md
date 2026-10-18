@@ -161,3 +161,9 @@
   unanimity/consensus/majority classification, so compare_arms'
   mode-vs-ground-truth sections populate
 - CI on push: not planned (user decision, 2026-10-16)
+- [x] Experiment 2 under GLM-5.3-Flash (reasoning_effort=low): both arms
+  94/94, zero failures, $24.23 exact; comparison in
+  data/experiments/comparison_glm/. Cross-generator robustness note
+  (Muse vs GLM: robust null arm effect, 96-98% decision agreement,
+  generator-sensitive mode labels) persisted as
+  docs/robustness-generator-comparison.md
