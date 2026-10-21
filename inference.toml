@@ -22,20 +22,32 @@ api_key_env = "FEATHERLESS_API_KEY"
 base_url = "https://api.together.ai/v1"
 api_key_env = "TOGETHER_API_KEY"
 
+[endpoints.ollama]
+base_url = "https://ollama.com/v1"
+api_key_env = "OLLAMA_API_KEY"
+
 # Agent statements, memo speech sections, decision-mode evidence
 # curation, profile synthesis.
 [roles.generator]
-endpoint = "featherless"
-model = "zai-org/GLM-5.3-Flash"
+endpoint = "ollama"
+model = "minimax-m3.1-flash"
 temperature = 0.7
-# GLM-5.3-Flash burns its whole budget reasoning before any content
-# appears (probed: out=2500, finish=length, content=''), and disabling
-# thinking did not reduce pipeline consumption — reasoning_effort=low
-# is the setting that fits the budget (probed: ~150 tokens, finish=stop,
-# full content)
-reasoning_effort = "low"
-max_tokens = 2500
-retries = 4
+# free tier on Ollama Cloud (probed 2026-10-21): hard ceiling of 6
+# concurrent requests — beyond it, instant 429s. Size the pipeline to
+# that (parallel x statement_concurrency <= 6) and keep retries high so
+# the 2..256 s exponential backoff absorbs 429 bursts. Content comes
+# back clean (no <think> pollution, finish=stop); hidden reasoning
+# tokens are billed inside completion_tokens at up to ~5x the visible
+# content, hence the 4000 headroom over the ~800-token statement cap.
+max_tokens = 4000
+retries = 8
+
+# endpoint = "featherless"
+# model = "zai-org/GLM-5.3-Flash"
+# temperature = 0.7
+# reasoning_effort = "low"
+# max_tokens = 2500
+# retries = 4
 
 # endpoint = "together"
 # model = "meta-models/Muse-Spark-Open-816B-A42B-promo"
