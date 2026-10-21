@@ -29,28 +29,31 @@ api_key_env = "OLLAMA_API_KEY"
 # Agent statements, memo speech sections, decision-mode evidence
 # curation, profile synthesis.
 [roles.generator]
-endpoint = "ollama"
-model = "minimax-m3.1-flash"
+endpoint = "featherless"
+model = "zai-org/GLM-5.3-Flash"
 temperature = 0.7
-# free tier on Ollama Cloud (probed 2026-10-21): 6 concurrent connections
-# allowed but processing is SERIAL per key (~75-90 tok/s aggregate decode,
-# measured: 6 real round-1 calls finished in a 28->203s staircase). Hidden
-# interleaved thinking cannot be fully disabled on pipeline prompts —
-# plain and effort=low burn the whole budget on reasoning with EMPTY
-# content (finish=length, probed on exact replicas); effort=none keeps it
-# bounded (round-1 out ~1800-4800, finish=stop, full content, no <think>
-# pollution). 6000 gives headroom over the observed 4776 max. Keep retries
-# high so the 2..256 s backoff absorbs the instant-429s past 6 connections.
-reasoning_effort = "none"
-max_tokens = 6000
-retries = 8
+# GLM-5.3-Flash burns its whole budget reasoning before any content
+# appears (probed: out=2500, finish=length, content=''), and disabling
+# thinking did not reduce pipeline consumption — reasoning_effort=low
+# is the setting that fits the budget (probed: ~150 tokens, finish=stop,
+# full content)
+reasoning_effort = "low"
+max_tokens = 2500
+retries = 4
 
-# endpoint = "featherless"
-# model = "zai-org/GLM-5.3-Flash"
+# ollama/minimax-m3.1-flash (dropped 2026-10-21, free-tier probe): the
+# only content-complete setting is reasoning_effort="none" +
+# max_tokens = 6000 (hidden interleaved thinking ~2-3k tokens cannot be
+# disabled and yields EMPTY content otherwise), and the free tier
+# decodes SERIALLY per key (~75-90 tok/s aggregate despite 6 allowed
+# connections) — a full 94x2 run needs ~110h, a partial run was not
+# wanted. Revisit only on a paid tier or a much faster serving tier.
+# endpoint = "ollama"
+# model = "minimax-m3.1-flash"
 # temperature = 0.7
-# reasoning_effort = "low"
-# max_tokens = 2500
-# retries = 4
+# reasoning_effort = "none"
+# max_tokens = 6000
+# retries = 8
 
 # endpoint = "together"
 # model = "meta-models/Muse-Spark-Open-816B-A42B-promo"
