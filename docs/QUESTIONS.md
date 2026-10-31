@@ -20,14 +20,16 @@
 2. **1999–2004 memberships**: earliest Wayback GC page is 2004-07. Seed the
    1999–2004 roster from ECB Annual Report appendices (~25 people, hand-curated)
    or accept a 2004+ simulation start?
-3. **Country GDP**: no source with true country GDP vintages exists (Eurostat
-   PEEI and ECB RTD are both aggregate-only). Keep country memos on
-   sentiment (+unemployment/IP vintages from PEEI) and drop country GDP, or use
-   latest-vintage country GDP masked by the t+45 release calendar
-   (approximation)?
+3. ~~**Country GDP**~~ — **solved**: the OECD STES revisions dataflow carries
+   true country GDP vintages per MEI edition (17 of 20 geos; CY/MT/HR stay
+   latest-revised + release-calendar mask) — `collectors/oecd_gdp_vintages.py`,
+   `docs/data-sources/oecd-stes-revisions.md`.
 4. **Target variable**: direction (hold/hike/cut) or magnitude (bp)?
 5. ~~**Voting rights**~~ — **resolved**: modelled explicitly from the accounts
    asterisks (2015+; `mpa_extract/participants.py`); used for the modal-voter
    decision cross-check and recorded per agent.
-6. **Hawkishness priors**: LLM classification of member speeches
-   (Hansen–Kazinnik style) as agent priors — v1 or later?
+6. ~~**Hawkishness priors**~~ — **resolved by design decision**: no standalone
+   numeric prior; each member's revealed policy orientation is distilled
+   qualitatively from their own speeches into the profile section
+   "Policy orientation — from your own speeches"
+   (`member_profiles/speech_stance.py`), which memos embed via profile_text.

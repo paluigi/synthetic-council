@@ -51,7 +51,7 @@
 - [x] Accounts-based attendance cross-check (2015+) — same module; 59/2,366
   rows flagged `in_memberships=false` (alternates, Wayback gaps, pre-accession
   observers)
-- [x] Monetary policy accounts pipeline (2015 →): 96 accounts as markdown,
+- [x] Monetary policy accounts pipeline (2015 →): 97 accounts as markdown,
   participants, CE proposals (deterministic-first + LLM fallback), decision
   mode (Jev over LLM-curated verbatim evidence; Bruegel/Trichet categories)
 - [x] Simulation engine, restructured CE-anchored (`feat/mpa-accounts-and-simulation`):
@@ -112,7 +112,6 @@
   `--diff-runs`; `simulation/replay.py` branches a saved payload under a
   different judge with zero generator calls. Generator live-validated
   (all 1,409 speech sections generated via Featherless GLM-5.3-Flash).
-  Remaining: the full two-arm run itself.
 - [x] Member-profile fill pass (GLM-5.3, 2026-10-15): ~50 thin profiles
   completed via directed web search (Wikipedia, ECB/NCB bios, press
   profiles) — raw results archived under
@@ -156,10 +155,10 @@
 - [x] EA industrial production pre-2021: `sts_inpr_m` aggregate (EA19 /
   EA20 → EA, overlap resolved to EA20) spliced under the PEEI true
   vintages — EA ip_yoy now spans 1999→2026 in the panel
-- [x] Decision-mode ground truth built (97 meetings,
-  `account_decision_mode.parquet`): verbatim evidence curation +
-  unanimity/consensus/majority classification, so compare_arms'
-  mode-vs-ground-truth sections populate
+- [x] Decision-mode ground truth built (95 rate meetings,
+  `account_decision_mode.parquet`; the two non-rate accounts stay
+  unlabelled): verbatim evidence curation + unanimity/consensus/majority
+  classification, so compare_arms' mode-vs-ground-truth sections populate
 - CI on push: not planned (user decision, 2026-10-16)
 - [x] Experiment 2 under GLM-5.3-Flash (reasoning_effort=low): both arms
   94/94, zero failures, $24.23 exact; comparison in
@@ -167,3 +166,19 @@
   (Muse vs GLM: robust null arm effect, 96-98% decision agreement,
   generator-sensitive mode labels) persisted as
   docs/robustness-generator-comparison.md
+- [x] Minimax generator probe, then revert (2026-10-21): ollama-cloud
+  endpoint type added to inference.toml + minimax-m3.1-flash tried as a
+  free-tier generator; reasoning_effort=low/max_tokens 2500 and then
+  effort=none/max_tokens 6000 probed (the only setting returning complete
+  content, but the free tier decodes serially — no concurrency); partial
+  run dropped, generator reverted to GLM-5.3-Flash on Featherless
+  (8610f7c). The ollama endpoint support stays available in
+  inference.toml.
+- [x] Working paper first draft (2026-10-30): `paper/` — 10pp LaTeX
+  (abstract, intro, related work, methods, results, discussion) built via
+  `make -C paper`; TikZ pipeline figure + two matplotlib figures + three
+  booktabs tables; `paper/refs.bib` curated (22 entries, real authors
+  resolved via OpenAlex/Crossref, acronym-safe for APA casing);
+  `scripts/make_paper_figures.py` regenerates the figures and re-derives
+  every quoted number from the experiment parquets (`--verify` prints the
+  number sheet); matplotlib added as a dev dependency.

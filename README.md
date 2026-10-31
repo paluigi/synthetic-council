@@ -25,9 +25,13 @@ src/synthetic_council/
     macro.py                PEEI vintages, RTD HICP vintages, CISS, sentiment
     macro_panel.py          as-of macro panel per meeting
     oecd_gdp_vintages.py    OECD MEI edition archive: country GDP true vintages
+    country_macro.py        country HICP/unemployment/IP vintages + masks
     projections.py          ECB/Eurosystem staff projections (MPD)
   accounts.py              monetary policy accounts (2015 →, markdown)
     ncb_speeches.py         BIS speeches hub harvest (governors)
+    ncb_websites.py         direct NCB-site speech harvesting (sitemaps, JSON-LD)
+    cbs_speeches.py         CBS dataset gap-filler for unharvestable NCBs
+    press_speeches.py       TinyFish press-coverage layer (fills gaps only)
   mpa_extract/              accounts extraction: participants + voting
     rights, decision mode (measurement model over verbatim evidence), CE proposal
   speech_union.py           strict-window latest-speech join (ECB + BIS)
@@ -53,8 +57,12 @@ data/
   processed/                curated datasets + memos_ea/ + memos_ea_country/
 docs/
   data-sources/             per-source explainer documents (reproducibility)
+  methods-simulation.md     canonical simulation methodology
+  robustness-generator-comparison.md   Muse vs GLM cross-generator replication
   literature-review.md      OpenAlex-compiled review
 references/references.bib   curated bibliography with abstracts
+paper/                      working paper (LaTeX; figures + verified numbers;
+  build with make -C paper; scripts/make_paper_figures.py regenerates)
 ```
 
 ## Reproducing
@@ -73,22 +81,22 @@ uv run python -m synthetic_council.memo
 Every dataset documents its endpoints, discovery path and verification in
 `docs/data-sources/`. No API keys required.
 
-## Datasets (verified 2026-09-23)
+## Datasets (verified 2026-11-01)
 
 | dataset | rows | span | source |
 |---|---|---|---|
 | `gc_decisions.parquet` | 319 meetings | 1999-03 → 2026-09 | ECB foedb (URL-slug dates, all eras) + SDMX FM |
 | `gc_memberships_wayback.parquet` | 93 tenures / 87 persons | 2004 → 2026 | Wayback GC pages (3 layouts) |
-| `accounts/` + `accounts_index.parquet` | 96 accounts (93 rate meetings) | 2015-01 → 2026-07 | ECB foedb enumeration + HTML→markdown |
-| `account_participants.parquet` | 2,366 meeting×member rows | 2015 → 2026 | accounts attendees + voting rights (asterisks) |
-| `account_ce_proposal.parquet` | 96 proposals (69 deterministic) | 2015 → 2026 | accounts §1 (regex; LLM fallback flagged) |
-| `account_decision_mode.parquet` | unanimity/consensus/majority + probs | 2015 → 2026 | Jev over LLM-curated §2 evidence |
-| `speeches.parquet` | 3,052 (ECB) + 47 (BIS) + NCB-web/blog harvest | 1997 → 2026-09 | ECB CSV + BIS hub + NCB websites + ECB blog |
-| `latest_speech_per_meeting.parquet` | strict window (see speech_union) | 2015 → 2026 | union of all speech corpora |
-| `macro_asof_panel.parquet` | ~45.1k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + OECD STES revisions (country GDP vintages) + CISS + DG-ECFIN |
+| `accounts/` + `accounts_index.parquet` | 97 accounts (95 rate meetings) | 2015-01 → 2026-09 | ECB foedb enumeration + HTML→markdown |
+| `account_participants.parquet` | 2,417 meeting×member rows | 2015 → 2026 | accounts attendees + voting rights (asterisks) |
+| `account_ce_proposal.parquet` | 97 proposals (70 deterministic, 25 manual, 2 failed) | 2015 → 2026 | accounts §1 (regex; LLM fallback flagged) |
+| `account_decision_mode.parquet` | 95 rate meetings: unanimity/consensus/majority + probs | 2015 → 2026 | Jev over LLM-curated §2 evidence |
+| `speeches` (raw corpora) | 3,071 (ECB) + 435 (BIS) + 591 (NCB-web) + 1,482 (CBS) + 109 (press) | 1997 → 2026-10 | ECB CSV + BIS sitemap + NCB websites + CBS + TinyFish press |
+| `latest_speech_per_meeting.parquet` | 1,409 strict-window links | 2015 → 2026 | union of all speech corpora |
+| `macro_asof_panel.parquet` | ~45.3k rows | 1999 → 2026; EA vintages 2001+; country HICP/GDP/unemp (21 geos) | ECB RTD + PEEI + Eurostat + OECD STES revisions (country GDP vintages) + CISS + DG-ECFIN |
 | `staff_projections.parquet` | 161,066 | 2000 → 2026 | ECB MPD |
-| `memos_ea/` + `memos_ea_country/` | 5,200 briefings each | 2004 → 2026 | assembled (experiment arms) |
-| `member_profiles/` | one reviewable .md per member | — | Tavily + Wikipedia + facts |
+| `memos_ea/` + `memos_ea_country/` | 5,071 briefings each | 2004 → 2026 | assembled (experiment arms) |
+| `member_profiles/` | one reviewable .md per member (88 persons) | — | Tavily + Wikipedia + facts + speech stance |
 
 Rate levels note: the MRO column splices the fixed-rate tender rate (MRR_FR)
 with the minimum bid rate (MRR_MBR) for the variable-rate-tender era
@@ -169,8 +177,12 @@ uv run python scripts/collect_all.py            # keyless pipeline (~30-40 min)
 uv run python -m synthetic_council.mpa_extract.decision_mode
 uv run python scripts/build_profiles.py
 uv run python -m synthetic_council.member_profiles.speech_sections
-uv run pytest                                   # 56 tests
+uv run pytest                                   # 150 tests
 uv run ruff check src/ scripts/ tests/
+
+# paper: figures + verified number sheet, then the PDF:
+uv run python scripts/make_paper_figures.py
+make -C paper
 ```
 
 The pipeline is deterministic given upstream sources; each collector prints its
