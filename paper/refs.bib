@@ -1,0 +1,226 @@
+% Curated subset of references/references.bib for the "Synthetic Council" paper.
+% Duplicate keys removed; real author names resolved via OpenAlex/DOI (2026-10-30).
+% `summary` fields are internal reading aids only and are never rendered.
+
+% ---------- LLM agents simulating humans and committees ----------
+
+@unpublished{kazinnik2025fomc,
+  title = {{FOMC} In Silico: A Multi-Agent System for Monetary Policy Decision Modeling},
+  author = {Kazinnik, Sophia and Sinclair, Tara M.},
+  year = {2025},
+  note = {SSRN Working Paper 5424097 / GW Department of Economics Working Paper 2025-005},
+  doi = {10.2139/ssrn.5424097},
+  summary = {Closest antecedent: LLM multi-agent FOMC simulation plus a Monte Carlo Bayesian voting benchmark, both seeded with member priors from real-time data and member profiles. Our ECB analogue differs by anchoring on the verbatim Chief Economist proposal and by measuring consensus rather than the rate level.}
+}
+
+@unpublished{hansen2025spf,
+  title = {Simulating the Survey of Professional Forecasters},
+  author = {Hansen, Anne Lundgaard and Horton, John J. and Kazinnik, Sophia and Puzzello, Daniela and Zarifhonarvar, Shakked},
+  year = {2025},
+  note = {SSRN Working Paper 5066286},
+  doi = {10.2139/ssrn.5066286},
+  summary = {Synthetic forecaster personas built with LLMs replicate key features of the human SPF distribution. Evidence that persona-conditioned LLM agents can track aggregate human panel data; motivates our within-persona memo design.}
+}
+
+@article{park2023generative,
+  title = {Generative Agents: Interactive Simulacra of Human Behavior},
+  author = {Park, Joon Sung and O'Brien, Joseph and Cai, Carrie Jun and Morris, Meredith Ringel and Liang, Percy and Bernstein, Michael S.},
+  year = {2023},
+  journal = {Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology},
+  doi = {10.1145/3586183.3606763},
+  summary = {Foundational generative-agents architecture: persona, memory, and reflection. The template for LLM agents that behave as plausible individuals rather than average responders.}
+}
+
+@unpublished{seok2024minifed,
+  title = {{MiniFed}: Integrating {LLM}-based Agentic-Workflow for Simulating {FOMC} Meeting},
+  author = {Seok, Sungil and Wen, Shuide and Yang, Qiyuan and Feng, Juan and Yang, Wenming},
+  year = {2024},
+  note = {arXiv preprint 2410.18012},
+  doi = {10.48550/arXiv.2410.18012},
+  summary = {Five-stage FOMC meeting simulation (discussion, persuasion, voting) with LLM agents. Shows structured multi-stage deliberation can reproduce realistic policy outcomes.}
+}
+
+@unpublished{hansen2024chatgpt,
+  title = {Can {ChatGPT} Decipher {Fedspeak}?},
+  author = {Hansen, Anne Louise and Kazinnik, Sophia},
+  year = {2024},
+  note = {SSRN Working Paper 4399406},
+  doi = {10.2139/ssrn.4399406},
+  summary = {ChatGPT classifies FOMC statements on a hawkish-dovish scale at human parity. Establishes LLM classification of policy communication; our speech-stance sections follow this qualitative approach.}
+}
+
+@unpublished{park2024interviews,
+  title = {Simulating Human Behavior Based on Personal Interviews to Power Generative Agent-Based Models},
+  author = {Park, Joon-Sung and Bernstein, Michael S. and Liang, Percy and Willer, Robb and Shaw, Aaron and Hill, Benjamin Mako and Morris, Meredith Ringel and Cai, Carrie Jun and Zou, Carolyn},
+  year = {2024},
+  note = {Preprint, OSF},
+  doi = {10.17605/osf.io/gk45t},
+  summary = {Preregistered program to validate interview-grounded generative agents against their target individuals. Frames the fidelity/replication-validity concerns we face when simulating identifiable policymakers.}
+}
+
+@unpublished{hou2025vacsim,
+  title = {Can A Society of Generative Agents Simulate Human Behavior and Inform Public Health Policy? A Case Study on Vaccine Hesitancy},
+  author = {Hou, Abe Bohan and Du, Hongru and Wang, Yi-Chen and Zhang, Jingyu and Wang, Zixiao and Liang, Paul Pu and Khashabi, Daniel and Gardner, Lauren and He, Tianxing},
+  year = {2025},
+  note = {arXiv preprint 2503.09639},
+  doi = {10.48550/arXiv.2503.09639},
+  summary = {100 generative agents simulate vaccine-hesitancy policy outcomes; documents real-world alignment challenges (inconsistency with demographic profiles). Example of evaluating whole-society LLM simulations against real outcomes.}
+}
+
+@inproceedings{cerqueira2025motif,
+  title = {{MOTIF}: A Framework for Enhancing the Profiling Module of Generative Agents that Simulate Human Behavior},
+  author = {Cerqueira, Tib{\'e}rio and Bezerra, P{\^a}mela Thays Lins},
+  year = {2025},
+  booktitle = {Proceedings of the 17th International Conference on Agents and Artificial Intelligence (ICAART)},
+  doi = {10.5220/0013181800003890},
+  summary = {Improves the persona/profiling module of generative agents. Directly relevant to our member-profile cards as the persona layer of the simulation.}
+}
+
+@article{gao2024large,
+  title = {Large Language Models Empowered Agent-Based Modeling and Simulation: A Survey and Perspectives},
+  author = {Gao, Chen and Lan, Xiaochong and Li, Nian and Yuan, Yuan and Ding, Jingtao and Zhou, Zhilun and Xu, Fengli and Li, Yong},
+  year = {2024},
+  journal = {Humanities and Social Sciences Communications},
+  volume = {11},
+  number = {1},
+  pages = {Article 1259},
+  doi = {10.1057/s41599-024-03611-3},
+  summary = {Field survey of LLM-empowered agent-based modeling across cyber, physical, and social domains; frames human-alignment and evaluation as the open challenges.}
+}
+
+@unpublished{carriero2024macro,
+  title = {Macroeconomic Forecasting with Large Language Models},
+  author = {Carriero, Andrea and Pettenuzzo, Davide and Shekhar, Shubhranshu},
+  year = {2024},
+  note = {arXiv preprint 2407.00890},
+  doi = {10.48550/arXiv.2407.00890},
+  summary = {LLMs vs traditional macro forecasting on FRED-MD. Representative of the LLMs-in-macroeconomics evidence base; motivates feeding agents real-time vintage data rather than vibes.}
+}
+
+% ---------- Consensus and heterogeneity in monetary policy committees ----------
+
+@article{riboni2010committee,
+  title = {Monetary Policy by Committee: Consensus, Chairman Dominance, or Simple Majority?},
+  author = {Riboni, Alessandro and Ruge-Murcia, Francisco J.},
+  year = {2010},
+  journal = {The Quarterly Journal of Economics},
+  volume = {125},
+  number = {1},
+  pages = {363--416},
+  doi = {10.1162/qjec.2010.125.1.363},
+  summary = {Estimates four voting protocols on five committees including the ECB: the consensus (supermajority) model fits best everywhere. Theoretical anchor for unanimity/consensus/majority as the decision-mode categories we measure.}
+}
+
+@article{badinger2013national,
+  title = {National Representation in Supranational Institutions: The Case of the {European Central Bank}},
+  author = {Badinger, Harald and Nitsch, Volker},
+  year = {2013},
+  journal = {Journal of Comparative Economics},
+  volume = {42},
+  number = {1},
+  pages = {19--33},
+  doi = {10.1016/j.jce.2013.05.007},
+  summary = {Does national background shape ECB Governing Council behavior? Evidence that governors' home-country characteristics matter. Motivates our country-annex treatment.}
+}
+
+@unpublished{fahrholz2004emu,
+  title = {{EMU}-Enlargement and the Reshaping of Decision-Making within the {ECB} Governing Council: A Voting-Power Analysis},
+  author = {Fahrholz, Christian and Mohl, Philipp},
+  year = {2004},
+  note = {Working paper},
+  summary = {Voting-power analysis of Governing Council reform scenarios under enlargement; background for the rotation/voting-rights structure we take from the accounts.}
+}
+
+@article{ehrmann2023communication,
+  title = {Monetary Policy Communication: Perspectives from Former Policymakers at the {ECB}},
+  author = {Ehrmann, Michael and Holton, Sarah and Kedan, Danielle and Phelan, Gillian},
+  year = {2023},
+  journal = {Journal of Money, Credit and Banking},
+  volume = {56},
+  number = {4},
+  pages = {837--864},
+  doi = {10.1111/jmcb.13054},
+  summary = {Survey of former Governing Council members on communication and decision-making; documents the weight of consensus-seeking in ECB practice.}
+}
+
+@unpublished{hubert2019tone,
+  title = {Central Bank Tone and the Dispersion of Views within Monetary Policy Committees},
+  author = {Hubert, Paul and Labondance, Fabien},
+  year = {2019},
+  note = {Working paper},
+  summary = {Central bank tone relates to the dispersion of views within the FOMC and predicts future decisions. Existing route to measuring (unobserved) committee disagreement from text; our simulation targets the same latent object.}
+}
+
+@article{apel2021disclose,
+  title = {How Much Information Do Monetary Policy Committees Disclose? Evidence from the {FOMC}'s Minutes and Transcripts},
+  author = {Apel, Mikael and Grimaldi, Marianna Blix and Hull, Isaiah},
+  year = {2022},
+  journal = {Journal of Money, Credit and Banking},
+  volume = {54},
+  number = {5},
+  pages = {1459--1490},
+  doi = {10.1111/jmcb.12885},
+  summary = {Minutes are an edited shadow of the discussion: transcripts contain predictive content minutes omit, including an agreement measure imported from ML. Justifies our claim that accounts only partially reveal GC consensus.}
+}
+
+@techreport{bobrov2024regional,
+  title = {Regional Dissent: Do Local Economic Conditions Influence {FOMC} Votes?},
+  author = {Bobrov, Anton and Kamdar, Rupal and Ulate, Mauricio},
+  year = {2024},
+  institution = {Federal Reserve Bank of San Francisco},
+  type = {Working Paper},
+  number = {2024-05},
+  doi = {10.24148/wp.2024-05},
+  summary = {District unemployment one pp above the US level raises the probability of dovish dissent by about nine pp. The FOMC analogue of our RQ2: does sub-national information move committee positions?}
+}
+
+@article{heinemann2021fiscal,
+  title = {The {ECB} Under the Threat of Fiscal Dominance --- The Individual Central Banker Dimension},
+  author = {Heinemann, Friedrich and Kemper, Jan},
+  year = {2021},
+  journal = {The Economists' Voice},
+  volume = {18},
+  number = {1},
+  pages = {5--30},
+  doi = {10.1515/ev-2021-0014},
+  summary = {Classifies GC governors as hawks/neutrals/doves from PEPP statements and correlates stance with home-country debt. Direct evidence that national positions show through in GC members' public stances.}
+}
+
+@techreport{malmendier2017hawks,
+  title = {The Making of Hawks and Doves: Inflation Experiences on the {FOMC}},
+  author = {Malmendier, Ulrike and Nagel, Stefan and Yan, Zhen},
+  year = {2017},
+  institution = {National Bureau of Economic Research},
+  type = {NBER Working Paper},
+  number = {23228},
+  doi = {10.3386/w23228},
+  summary = {Lifetime inflation experiences predict FOMC voting and speech tone. Background for why member identities/personas should matter in a faithful simulation.}
+}
+
+@techreport{bordo2018perceived,
+  title = {Perceived {FOMC}: The Making of Hawks, Doves and Swingers},
+  author = {Bordo, Michael D. and Istrefi, Klodiana},
+  year = {2018},
+  institution = {National Bureau of Economic Research},
+  type = {NBER Working Paper},
+  number = {24650},
+  doi = {10.3386/w24650},
+  summary = {Cohort and education predict perceived hawk/dove labels of FOMC members. Supports persona-conditioned agents over homogeneous ones.}
+}
+
+@unpublished{tobback2017between,
+  title = {Between Hawks and Doves: Measuring Central Bank Communication},
+  author = {Tobback, Ellen and Nardelli, Stefano and Martens, David},
+  year = {2017},
+  note = {SSRN Working Paper 2997481},
+  doi = {10.2139/ssrn.2997481},
+  summary = {Text-based hawkishness measurement for central bank communication (ECB speeches among the applications). Part of the text-as-data measurement tradition our judge-based stance extraction extends.}
+}
+
+@unpublished{jung2012voting,
+  title = {Voting by Monetary Policy Committees: Evidence from the {CEE} Inflation-Targeting Countries},
+  author = {Jung, Alexander and Kiss, Gergely},
+  year = {2012},
+  note = {Working paper},
+  summary = {Individual voting records and Taylor-type reaction functions to infer preference heterogeneity in MPCs; template for revealed-preference measurement of committee disagreement where votes are published.}
+}

@@ -1,0 +1,92 @@
+% Figure 1: end-to-end pipeline of the synthetic-council simulation.
+% Included from main.tex inside a figure environment (A4 portrait, full text width).
+% Natural size: 16cm wide (= \textwidth with a4paper + 2.5cm margins), ~13.2cm tall.
+% No scaling: fonts render at nominal size (\footnotesize = 9pt at 11pt base).
+
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw=black!45, rounded corners=2pt, align=left, inner sep=4pt},
+  databox/.style={box, fill=black!4, text width=4.62cm, minimum height=1.75cm},
+  memobox/.style={box, fill=black!4, text width=12.4cm, align=center},
+  armbox/.style={box, text width=6.9cm, minimum height=1.3cm},
+  stepbox/.style={box, fill=black!4, text width=2.02cm, align=center, minimum height=1.52cm},
+  outbox/.style={box, text width=4.62cm, minimum height=1.35cm},
+  bandlabel/.style={font=\small\bfseries, anchor=west},
+  ln/.style={black!65},
+  fl/.style={-{Latex[length=1.8mm]}, black!65},
+  flt/.style={fl, thick},
+]
+
+% ---------------- Band A: data inputs (two rows of three) ----------------
+\node[bandlabel] at (-8.0, 1.0) {A.~Data inputs};
+\node[databox] (a1) at (-5.47, -0.3)
+  {\textbf{Monetary policy accounts}\\ attendees, voting rights, verbatim CE proposal, decision-mode ground truth};
+\node[databox] (a2) at (0.0, -0.3)
+  {\textbf{Real-time macro vintages}\\ euro-area indicators; country indicators for the annex};
+\node[databox] (a3) at (5.47, -0.3)
+  {\textbf{Member profiles}\\ web-sourced persona cards (88 persons)};
+\node[databox] (a4) at (-5.47, -2.55)
+  {\textbf{Decisions \& key rates}\\ 319 GC decisions, 1999--2026 (ground truth)};
+\node[databox] (a5) at (0.0, -2.55)
+  {\textbf{Staff projections}\\ ECB projection rounds, as released};
+\node[databox] (a6) at (5.47, -2.55)
+  {\textbf{Member speeches}\\ own latest speech (strict meeting window)};
+
+% ---------------- Band B: memo construction ----------------
+\node[bandlabel] at (-8.0, -4.0) {B.~Memo construction};
+\node[memobox] (memo) at (0.0, -4.95)
+  {\textbf{Per-member meeting memo} (one per meeting $\times$ member $\times$ arm):\\
+   identity \& profile card, euro-area indicator table, staff projections, own recent speech};
+\node[armbox, fill=blue!9] (ea) at (-4.0, -6.65)
+  {\textbf{Arm 1: \texttt{ea\_only}}\\ euro-area memo only, shared by all members};
+\node[armbox, fill=orange!14] (co) at (4.0, -6.65)
+  {\textbf{Arm 2: \texttt{country}}\\ $+$ 7-indicator country annex (governors only); the only difference between arms};
+
+% input bus: row-2 boxes drop straight down; row-1 boxes route through the
+% column gaps (x = +-2.735) into the same bus
+\draw[ln] (a1.south) -- (-5.47,-1.45) -- (-2.735,-1.45) -- (-2.735,-3.65);
+\draw[ln] (a2.south) -- (0,-1.45) -- (-2.735,-1.45);
+\draw[ln] (a3.south) -- (5.47,-1.45) -- (2.735,-1.45) -- (2.735,-3.65);
+\draw[ln] (-5.47,-3.65) -- (5.47,-3.65);
+\draw[ln] (a4.south) -- (-5.47,-3.65);
+\draw[ln] (a5.south) -- (0,-3.65);
+\draw[ln] (a6.south) -- (5.47,-3.65);
+\draw[flt] (0,-3.65) -- (memo.north);
+\draw[fl] (memo.south) -- ++(0,-0.25) -| (ea.north);
+\draw[fl] (memo.south) -- ++(0,-0.25) -| (co.north);
+
+% ---------------- Band C: meeting protocol (chain of six) ----------------
+\node[stepbox] (s1) at (-6.76, -8.9) {\textbf{1.~CE anchor}\\ verbatim proposal, no LLM};
+\node[stepbox] (s2) at (-4.06, -8.9) {\textbf{2.~Round 1}\\ reactions to proposal};
+\node[stepbox] (s3) at (-1.36, -8.9) {\textbf{3.~Round 2}\\ responses to colleagues};
+\node[stepbox] (s4) at (1.34, -8.9) {\textbf{4.~CE reply}\\ defends or adjusts};
+\node[stepbox] (s5) at (4.04, -8.9) {\textbf{5.~Positions}\\ each: raise / hold / lower};
+\node[stepbox] (s6) at (6.74, -8.9) {\textbf{6.~Decision}\\ President, voter cross-check};
+\draw[fl] (s1) -- (s2);
+\draw[fl] (s2) -- (s3);
+\draw[fl] (s3) -- (s4);
+\draw[fl] (s4) -- (s5);
+\draw[fl] (s5) -- (s6);
+\draw[ln] (-6.76,-7.55) -- (6.74,-7.55);
+\draw[ln] (ea.south) -- (-4.0,-7.55);
+\draw[ln] (co.south) -- (4.0,-7.55);
+\draw[flt] (-6.76,-7.55) -- (s1.north);
+\node[bandlabel] at (-6.3,-7.8) {C.~Meeting protocol};
+\node[font=\footnotesize\itshape] at (1.9,-7.8) {each arm $\times$ meeting (94 meetings, 21--27 agents)};
+
+% ---------------- Band D: measurement ----------------
+\node[outbox, fill=green!9] (m1) at (-5.47, -11.35)
+  {\textbf{P(aligned), simulated decision}\\ internal cohesion: the consensus estimate};
+\node[outbox, fill=green!9] (m2) at (0.0, -11.35)
+  {\textbf{P(aligned), real decision}\\ decision-level validity check};
+\node[outbox, fill=green!9] (m3) at (5.47, -11.35)
+  {\textbf{Decision mode}\\ judge $+$ thresholds vs.\ accounts ground truth};
+\draw[ln] (-6.76,-9.95) -- (6.74,-9.95);
+\draw[ln] (s1.south) -- (-6.76,-9.95);
+\draw[ln] (s6.south) -- (6.74,-9.95);
+\draw[flt] (-5.47,-9.95) -- (m1.north);
+\draw[flt] (0,-9.95) -- (m2.north);
+\draw[flt] (5.47,-9.95) -- (m3.north);
+\node[bandlabel] at (-4.95,-10.3) {D.~Measurement};
+
+\end{tikzpicture}
